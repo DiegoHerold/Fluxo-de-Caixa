@@ -1,4 +1,4 @@
-import { Edit3, Link2, Plus, Power, UserRound } from "lucide-react";
+import { AlertTriangle, Edit3, Link2, Plus, Power, Settings2, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "../components/ui/Badge";
@@ -7,9 +7,9 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input, Select } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
 import { PageToolbar } from "../components/ui/PageToolbar";
-import { formatDateBR, money } from "../services/api";
+import { formatDateBR, money, todayISODate } from "../services/api";
 import { chartAccountsService } from "../services/chartAccountsService";
-import { loansService, type LoanLinkPayload, type LoanPersonPayload } from "../services/loansService";
+import { loansService, type LoanLinkPayload, type LoanLossWriteoffPayload, type LoanPersonPayload } from "../services/loansService";
 import type { ChartAccount } from "../types/chartAccount";
 import type { LoanAccountLink, LoanMovementEffect, LoanPerson } from "../types/loan";
 
@@ -30,6 +30,12 @@ const emptyLink: LoanLinkPayload = {
   is_active: true
 };
 
+const emptyLoss: LoanLossWriteoffPayload = {
+  writeoff_date: todayISODate(),
+  amount: "",
+  notes: ""
+};
+
 const effectLabel: Record<LoanMovementEffect, string> = {
   increase: "Aumenta divida",
   decrease: "Abate divida"
@@ -44,11 +50,16 @@ export function LoansPage() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [selectedLink, setSelectedLink] = useState<LoanAccountLink | null>(null);
   const [linkForm, setLinkForm] = useState<LoanLinkPayload>(emptyLink);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [lossOpen, setLossOpen] = useState(false);
+  const [lossForm, setLossForm] = useState<LoanLossWriteoffPayload>(emptyLoss);
+  const [lossChartAccountId, setLossChartAccountId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const people = useQuery({ queryKey: ["loan-people"], queryFn: () => loansService.people(true) });
   const links = useQuery({ queryKey: ["loan-links"], queryFn: () => loansService.links(undefined, true) });
   const chartAccounts = useQuery({ queryKey: ["chart-accounts"], queryFn: () => chartAccountsService.list() });
+  const settings = useQuery({ queryKey: ["loan-settings"], queryFn: loansService.settings });
   const movements = useQuery({
     queryKey: ["loan-movements", activePersonId],
     queryFn: () => loansService.movements(activePersonId!),
@@ -127,10 +138,17 @@ export function LoansPage() {
     );
   }, [selectedLink, linkOpen, activePersonId]);
 
+  useEffect(() => {
+    setLossChartAccountId(settings.data?.loss_chart_account_id ?? null);
+  }, [settings.data?.loss_chart_account_id, settingsOpen]);
+
   function invalidateLoans() {
     queryClient.invalidateQueries({ queryKey: ["loan-people"] });
     queryClient.invalidateQueries({ queryKey: ["loan-links"] });
     queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
+    queryClient.invalidateQueries({ queryKey: ["loan-settings"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-widgets"] });
+    queryClient.invalidateQueries({ queryKey: ["report-indicator-evaluations"] });
   }
 
   const savePersonMutation = useMutation({
@@ -175,6 +193,30 @@ export function LoansPage() {
     onSuccess: () => invalidateLoans()
   });
 
+  const saveSettingsMutation = useMutation({
+    mutationFn: () => loansService.updateSettings({ loss_chart_account_id: lossChartAccountId }),
+    onSuccess: () => {
+      setSettingsOpen(false);
+      setFormError(null);
+      invalidateLoans();
+    },
+    onError: (error: unknown) => setFormError(getErrorDetail(error) ?? "Nao foi possivel salvar a classificacao de perda.")
+  });
+
+  const createLossMutation = useMutation({
+    mutationFn: () => {
+      if (!activePersonId) throw new Error("Pessoa obrigatoria");
+      return loansService.createLoss(activePersonId, normalizeLossPayload(lossForm));
+    },
+    onSuccess: () => {
+      setLossOpen(false);
+      setLossForm(emptyLoss);
+      setFormError(null);
+      invalidateLoans();
+    },
+    onError: (error: unknown) => setFormError(getErrorDetail(error) ?? "Nao foi possivel baixar a perda.")
+  });
+
   return (
     <div className="grid gap-6">
       <PageToolbar>
@@ -199,6 +241,12 @@ export function LoansPage() {
             >
               Vincular plano
             </Button>
+            <Button
+              variant="ghost"
+              title="Configurar classificacao de perda"
+              icon={<Settings2 size={16} />}
+              onClick={() => setSettingsOpen(true)}
+            />
             <Button
               icon={<Plus size={16} />}
               onClick={() => {
@@ -255,6 +303,16 @@ export function LoansPage() {
                     <div className="mt-1 text-sm text-gray-500">{activePerson.document || "Sem documento"} {activePerson.phone ? `| ${activePerson.phone}` : ""}</div>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      title="Baixar valor perdido"
+                      icon={<AlertTriangle size={15} />}
+                      disabled={Number(activePerson.current_balance) <= 0}
+                      onClick={() => {
+                        setLossForm({ ...emptyLoss, amount: Math.max(Number(activePerson.current_balance), 0).toFixed(2) });
+                        setLossOpen(true);
+                      }}
+                    />
                     <Button
                       variant="secondary"
                       icon={<Edit3 size={16} />}
@@ -355,11 +413,11 @@ export function LoansPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {(movements.data ?? []).map((movement) => (
-                      <tr key={movement.transaction_id} className="hover:bg-gray-50">
+                      <tr key={movement.transaction_id ?? `loss-${movement.writeoff_id}`} className="hover:bg-gray-50">
                         <td className="whitespace-nowrap px-3 py-3">{formatDateBR(movement.transaction_date)}</td>
                         <td className="px-3 py-3">
                           <div className="font-bold text-gray-950">{movement.description}</div>
-                          <div className="text-xs text-gray-500">{movement.account_name}</div>
+                          <div className="text-xs text-gray-500">{movement.movement_kind === "loss" ? "Baixa por perda" : movement.account_name}</div>
                         </td>
                         <td className="px-3 py-3">{movement.chart_account_code} - {movement.chart_account_name}</td>
                         <td className={`whitespace-nowrap px-3 py-3 text-right font-bold ${balanceTone(movement.debt_delta)}`}>
@@ -430,6 +488,62 @@ export function LoansPage() {
             chartAccounts={chartAccountOptions}
             selectedLink={selectedLink}
           />
+        </Modal>
+      )}
+
+      {settingsOpen && (
+        <Modal
+          title="Classificacao de perda"
+          description="Essa classificacao e unica para todos os emprestimos. Use uma conta de despesa, como 3.10 - Perdas com emprestimos."
+          onClose={() => {
+            setSettingsOpen(false);
+            setFormError(null);
+          }}
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={() => setSettingsOpen(false)}>Cancelar</Button>
+              <Button type="button" disabled={!lossChartAccountId || saveSettingsMutation.isPending} onClick={() => saveSettingsMutation.mutate()}>
+                Salvar
+              </Button>
+            </>
+          }
+        >
+          {formError && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{formError}</div>}
+          <Select
+            label="Classificacao para perdas"
+            value={lossChartAccountId ?? ""}
+            onChange={(event) => setLossChartAccountId(event.target.value ? Number(event.target.value) : null)}
+          >
+            <option value="">Selecione uma despesa</option>
+            {(chartAccounts.data ?? [])
+              .filter((account) => account.account_nature === "expense")
+              .map((account) => <option key={account.id} value={account.id}>{account.code} - {account.name}</option>)}
+          </Select>
+        </Modal>
+      )}
+
+      {lossOpen && activePerson && (
+        <Modal
+          title="Baixar valor perdido"
+          description="Use apenas quando o valor nao sera mais recebido. Isso reduz a divida da pessoa e registra a perda na classificacao configurada."
+          onClose={() => {
+            setLossOpen(false);
+            setFormError(null);
+          }}
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={() => setLossOpen(false)}>Cancelar</Button>
+              <Button type="button" disabled={!lossForm.amount || createLossMutation.isPending} onClick={() => createLossMutation.mutate()}>
+                Confirmar perda
+              </Button>
+            </>
+          }
+        >
+          {formError && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{formError}</div>}
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+            Classificacao: {settings.data?.loss_chart_account_code ? `${settings.data.loss_chart_account_code} - ${settings.data.loss_chart_account_name}` : "configure antes de baixar"}
+          </div>
+          <LossForm value={lossForm} maxAmount={activePerson.current_balance} onChange={setLossForm} />
         </Modal>
       )}
     </div>
@@ -516,6 +630,31 @@ function LinkForm({
   );
 }
 
+function LossForm({
+  value,
+  maxAmount,
+  onChange
+}: {
+  value: LoanLossWriteoffPayload;
+  maxAmount: string;
+  onChange: (value: LoanLossWriteoffPayload) => void;
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <Input label="Data da perda" type="date" value={value.writeoff_date} onChange={(event) => onChange({ ...value, writeoff_date: event.target.value })} />
+      <Input label={`Valor perdido (max. ${money(maxAmount)})`} type="number" step="0.01" min="0" value={value.amount} onChange={(event) => onChange({ ...value, amount: event.target.value })} />
+      <label className="grid gap-1 text-sm font-medium text-gray-700 md:col-span-2">
+        <span>Observacoes</span>
+        <textarea
+          className="min-h-20 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          value={value.notes ?? ""}
+          onChange={(event) => onChange({ ...value, notes: event.target.value })}
+        />
+      </label>
+    </div>
+  );
+}
+
 function normalizePersonPayload(value: LoanPersonPayload): LoanPersonPayload {
   return {
     ...value,
@@ -529,6 +668,14 @@ function normalizePersonPayload(value: LoanPersonPayload): LoanPersonPayload {
 function normalizeLinkPayload(value: LoanLinkPayload): LoanLinkPayload {
   return {
     ...value,
+    notes: value.notes || null
+  };
+}
+
+function normalizeLossPayload(value: LoanLossWriteoffPayload): LoanLossWriteoffPayload {
+  return {
+    ...value,
+    amount: value.amount || "0.00",
     notes: value.notes || null
   };
 }

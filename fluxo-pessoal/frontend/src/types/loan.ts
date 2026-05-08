@@ -30,7 +30,8 @@ export interface LoanAccountLink {
 }
 
 export interface LoanMovement {
-  transaction_id: number;
+  transaction_id: number | null;
+  writeoff_id: number | null;
   transaction_date: string;
   description: string;
   account_name: string | null;
@@ -41,4 +42,23 @@ export interface LoanMovement {
   effect: LoanMovementEffect;
   debt_delta: string;
   balance_after: string;
+  movement_kind: "transaction" | "loss";
+}
+
+export interface LoanSettings {
+  loss_chart_account_id: number | null;
+  loss_chart_account_code: string | null;
+  loss_chart_account_name: string | null;
+}
+
+export interface LoanLossWriteoff {
+  id: number;
+  person_id: number;
+  chart_account_id: number;
+  chart_account_code: string | null;
+  chart_account_name: string | null;
+  writeoff_date: string;
+  amount: string;
+  notes: string | null;
+  created_at: string;
 }

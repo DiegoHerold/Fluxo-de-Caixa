@@ -9,11 +9,15 @@ from app.schemas.loan_schema import (
     LoanAccountLinkCreate,
     LoanAccountLinkRead,
     LoanAccountLinkUpdate,
+    LoanLossWriteoffCreate,
+    LoanLossWriteoffRead,
     LoanMovementRead,
     LoanPersonCreate,
     LoanPersonRead,
     LoanPersonSummary,
     LoanPersonUpdate,
+    LoanSettingsRead,
+    LoanSettingsUpdate,
 )
 from app.services.loan_service import LoanService
 
@@ -32,6 +36,16 @@ def create_person(payload: LoanPersonCreate, db: Session = Depends(get_db)):
 @router.get("/people", response_model=list[LoanPersonSummary])
 def list_people(include_inactive: bool = False, db: Session = Depends(get_db)):
     return LoanService(db).list_people(include_inactive)
+
+
+@router.get("/settings", response_model=LoanSettingsRead)
+def get_settings(db: Session = Depends(get_db)):
+    return LoanService(db).settings()
+
+
+@router.put("/settings", response_model=LoanSettingsRead)
+def update_settings(payload: LoanSettingsUpdate, db: Session = Depends(get_db)):
+    return LoanService(db).update_settings(payload.loss_chart_account_id)
 
 
 @router.get("/people/{person_id}", response_model=LoanPersonSummary)
@@ -66,6 +80,19 @@ def deactivate_person(person_id: int, db: Session = Depends(get_db)):
 def list_person_movements(person_id: int, db: Session = Depends(get_db)):
     person = _get_person(db, person_id)
     return LoanService(db).list_movements(person)
+
+
+@router.post("/people/{person_id}/losses", response_model=LoanLossWriteoffRead, status_code=status.HTTP_201_CREATED)
+def create_loss_writeoff(person_id: int, payload: LoanLossWriteoffCreate, db: Session = Depends(get_db)):
+    person = _get_person(db, person_id)
+    return LoanService(db).create_loss_writeoff(person, payload)
+
+
+@router.get("/losses", response_model=list[LoanLossWriteoffRead])
+def list_losses(person_id: int | None = None, db: Session = Depends(get_db)):
+    if person_id:
+        _get_person(db, person_id)
+    return LoanService(db).list_losses(person_id)
 
 
 @router.post("/links", response_model=LoanAccountLinkRead, status_code=status.HTTP_201_CREATED)

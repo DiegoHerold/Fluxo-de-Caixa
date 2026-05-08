@@ -9,6 +9,7 @@ from app.models.account import Account
 from app.models.balance_snapshot import BalanceSnapshot
 from app.models.chart_account import ChartAccount
 from app.models.enums import AccountNature, BalanceStatus, ClassificationStatus, TransactionType
+from app.models.loan import LoanLossWriteoff
 from app.models.transaction import Transaction
 from app.schemas.report_schema import CategoryReportItem, ComparisonReportItem, MonthlyReport
 from app.services.balance_service import BalanceService
@@ -150,7 +151,17 @@ class ReportService:
                 bucket_condition,
             )
         )
-        return -(self.db.scalar(stmt) or Decimal("0.00"))
+        transaction_total = -(self.db.scalar(stmt) or Decimal("0.00"))
+        loss_stmt = (
+            select(func.coalesce(func.sum(LoanLossWriteoff.amount), 0))
+            .join(ChartAccount, ChartAccount.id == LoanLossWriteoff.chart_account_id)
+            .where(
+                LoanLossWriteoff.writeoff_date >= start,
+                LoanLossWriteoff.writeoff_date < end,
+                bucket_condition,
+            )
+        )
+        return transaction_total + (self.db.scalar(loss_stmt) or Decimal("0.00"))
 
     def _code_root_condition(self, root_code: str):
         return or_(ChartAccount.code == root_code, ChartAccount.code.like(f"{root_code}.%"))

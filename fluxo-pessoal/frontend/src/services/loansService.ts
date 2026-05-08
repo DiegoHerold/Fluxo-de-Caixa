@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { LoanAccountLink, LoanMovement, LoanMovementEffect, LoanPerson } from "../types/loan";
+import type { LoanAccountLink, LoanLossWriteoff, LoanMovement, LoanMovementEffect, LoanPerson, LoanSettings } from "../types/loan";
 
 export type LoanPersonPayload = {
   name: string;
@@ -16,6 +16,16 @@ export type LoanLinkPayload = {
   effect: LoanMovementEffect;
   notes?: string | null;
   is_active: boolean;
+};
+
+export type LoanSettingsPayload = {
+  loss_chart_account_id: number | null;
+};
+
+export type LoanLossWriteoffPayload = {
+  writeoff_date: string;
+  amount: string;
+  notes?: string | null;
 };
 
 export const loansService = {
@@ -55,6 +65,18 @@ export const loansService = {
   },
   async movements(personId: number) {
     const { data } = await api.get<LoanMovement[]>(`/loans/people/${personId}/movements`);
+    return data;
+  },
+  async settings() {
+    const { data } = await api.get<LoanSettings>("/loans/settings");
+    return data;
+  },
+  async updateSettings(payload: LoanSettingsPayload) {
+    const { data } = await api.put<LoanSettings>("/loans/settings", payload);
+    return data;
+  },
+  async createLoss(personId: number, payload: LoanLossWriteoffPayload) {
+    const { data } = await api.post<LoanLossWriteoff>(`/loans/people/${personId}/losses`, payload);
     return data;
   }
 };

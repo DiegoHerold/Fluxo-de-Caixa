@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.chart_account import ChartAccount
 from app.models.enums import AccountNature, FormulaOperation, FormulaValueMode
+from app.models.loan import LoanLossWriteoff
 from app.models.report_indicator import ReportIndicator, ReportIndicatorTerm
 from app.models.transaction import Transaction
 from app.schemas.report_indicator_schema import (
@@ -733,7 +734,12 @@ class ReportIndicatorService:
         )
         if not indicator.include_internal_transfers:
             stmt = stmt.where(Transaction.is_internal_transfer.is_(False))
-        return self.db.scalar(stmt) or Decimal("0.00")
+        return (self.db.scalar(stmt) or Decimal("0.00")) + self._loan_loss_amount(
+            term.chart_account,
+            term.value_mode,
+            start,
+            end,
+        )
 
     def _period_bounds(
         self,
@@ -829,7 +835,30 @@ class ReportIndicatorService:
         )
         if not include_internal_transfers:
             stmt = stmt.where(Transaction.is_internal_transfer.is_(False))
-        return self.db.scalar(stmt) or Decimal("0.00")
+        return (self.db.scalar(stmt) or Decimal("0.00")) + self._loan_loss_amount(account, value_mode, start, end)
+
+    def _loan_loss_amount(
+        self,
+        account: ChartAccount,
+        value_mode: FormulaValueMode,
+        start: date,
+        end: date,
+    ) -> Decimal:
+        if value_mode == FormulaValueMode.inflow:
+            return Decimal("0.00")
+        stmt = (
+            select(func.coalesce(func.sum(LoanLossWriteoff.amount), 0))
+            .join(ChartAccount, ChartAccount.id == LoanLossWriteoff.chart_account_id)
+            .where(
+                LoanLossWriteoff.writeoff_date >= start,
+                LoanLossWriteoff.writeoff_date < end,
+                or_(ChartAccount.id == account.id, ChartAccount.code.like(f"{account.code}.%")),
+            )
+        )
+        amount = self.db.scalar(stmt) or Decimal("0.00")
+        if value_mode == FormulaValueMode.net:
+            return -amount
+        return amount
 
     def _natural_value_mode(self, account: ChartAccount) -> FormulaValueMode:
         if account.account_nature == AccountNature.income:

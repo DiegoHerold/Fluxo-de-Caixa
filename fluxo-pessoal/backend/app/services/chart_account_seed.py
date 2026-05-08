@@ -58,8 +58,10 @@ DEFAULT_CHART_ACCOUNTS: list[tuple[str, str, str | None, AccountNature]] = [
     # 5 - Transferências Internas
     ("5", "Transferências Internas", None, AccountNature.transfer),
     ("5.1", "Entre contas próprias", "5", AccountNature.transfer),
-    ("5.2", "Conta para caixinha", "5", AccountNature.transfer),
-    ("5.3", "Caixinha para conta", "5", AccountNature.transfer),
+    ("5.2", "Para caixinhas", "5", AccountNature.transfer),
+    ("5.2.1", "Para reserva emergencia", "5.2", AccountNature.transfer),
+    ("5.3", "De caixinhas para conta", "5", AccountNature.transfer),
+    ("5.3.1", "Da reserva emergencia", "5.3", AccountNature.transfer),
     ("5.4", "Entre caixinhas", "5", AccountNature.transfer),
     ("5.5", "Dinheiro físico", "5", AccountNature.transfer),
     # 6 - Ajustes, Estornos e Reembolsos
@@ -76,16 +78,6 @@ DEFAULT_CHART_ACCOUNTS: list[tuple[str, str, str | None, AccountNature]] = [
     ("7.3", "Conta dividida a receber", "7", AccountNature.loan),
     ("7.4", "Conta dividida recebida", "7", AccountNature.loan),
     ("7.5", "Valor perdido / não recebido", "7", AccountNature.loan),
-    # 8 - Gastos Planejados com Reservas
-    ("8", "Gastos Planejados com Reservas", None, AccountNature.reserve),
-    ("8.1", "Uso reserva emergência", "8", AccountNature.reserve),
-    ("8.2", "Uso reserva casa", "8", AccountNature.reserve),
-    ("8.3", "Uso reserva moto", "8", AccountNature.reserve),
-    ("8.4", "Uso reserva roupas", "8", AccountNature.reserve),
-    ("8.5", "Uso reserva setup", "8", AccountNature.reserve),
-    ("8.6", "Uso reserva cabelo", "8", AccountNature.reserve),
-    ("8.7", "Uso reserva presentes", "8", AccountNature.reserve),
-    ("8.8", "Outros usos de reserva", "8", AccountNature.reserve),
 ]
 
 
@@ -101,7 +93,7 @@ def seed_default_chart_accounts(db: Session) -> list[ChartAccount]:
 
     for code, name, parent_code, nature in DEFAULT_CHART_ACCOUNTS:
         if code in code_to_item:
-            if code.startswith("7") and code_to_item[code].account_nature != nature:
+            if (code.startswith("7") or code.startswith("8")) and code_to_item[code].account_nature != nature:
                 code_to_item[code].account_nature = nature
                 updated_existing = True
             continue

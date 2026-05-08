@@ -13,6 +13,8 @@ class ReserveBox(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    chart_account_id: Mapped[int | None] = mapped_column(ForeignKey("chart_accounts.id"), index=True)
+    withdrawal_chart_account_id: Mapped[int | None] = mapped_column(ForeignKey("chart_accounts.id"), index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     current_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=0)
     target_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
@@ -22,3 +24,5 @@ class ReserveBox(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     account = relationship("Account", back_populates="reserve_boxes")
+    chart_account = relationship("ChartAccount", foreign_keys=[chart_account_id])
+    withdrawal_chart_account = relationship("ChartAccount", foreign_keys=[withdrawal_chart_account_id])

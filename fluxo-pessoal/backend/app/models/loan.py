@@ -1,7 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Numeric, String, Text, func, text
+from datetime import date
+
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -47,4 +49,29 @@ class LoanAccountLink(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     person = relationship("LoanPerson", back_populates="links")
+    chart_account = relationship("ChartAccount")
+
+
+class LoanSettings(Base):
+    __tablename__ = "loan_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    loss_chart_account_id: Mapped[int | None] = mapped_column(ForeignKey("chart_accounts.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    loss_chart_account = relationship("ChartAccount")
+
+
+class LoanLossWriteoff(Base):
+    __tablename__ = "loan_loss_writeoffs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("loan_people.id"), nullable=False, index=True)
+    chart_account_id: Mapped[int] = mapped_column(ForeignKey("chart_accounts.id"), nullable=False, index=True)
+    writeoff_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    person = relationship("LoanPerson")
     chart_account = relationship("ChartAccount")

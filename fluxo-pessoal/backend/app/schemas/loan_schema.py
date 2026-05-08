@@ -74,7 +74,8 @@ class LoanAccountLinkRead(LoanAccountLinkBase):
 
 
 class LoanMovementRead(BaseModel):
-    transaction_id: int
+    transaction_id: int | None = None
+    writeoff_id: int | None = None
     transaction_date: date
     description: str
     account_name: str | None = None
@@ -85,3 +86,34 @@ class LoanMovementRead(BaseModel):
     effect: LoanMovementEffect
     debt_delta: Decimal
     balance_after: Decimal
+    movement_kind: str = "transaction"
+
+
+class LoanSettingsRead(BaseModel):
+    loss_chart_account_id: int | None = None
+    loss_chart_account_code: str | None = None
+    loss_chart_account_name: str | None = None
+
+
+class LoanSettingsUpdate(BaseModel):
+    loss_chart_account_id: int | None = None
+
+
+class LoanLossWriteoffCreate(BaseModel):
+    writeoff_date: date
+    amount: Decimal = Field(..., gt=0)
+    notes: str | None = None
+
+
+class LoanLossWriteoffRead(BaseModel):
+    id: int
+    person_id: int
+    chart_account_id: int
+    chart_account_code: str | None = None
+    chart_account_name: str | None = None
+    writeoff_date: date
+    amount: Decimal
+    notes: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -4,7 +4,7 @@ from app.models.chart_account import ChartAccount
 from app.models.classification_rule import ClassificationRule
 from app.models.dashboard_widget import DashboardWidget
 from app.models.import_batch import ImportBatch
-from app.models.loan import LoanAccountLink, LoanPerson
+from app.models.loan import LoanAccountLink, LoanLossWriteoff, LoanPerson, LoanSettings
 from app.models.report_indicator import ReportIndicator, ReportIndicatorTerm
 from app.models.reserve_box import ReserveBox
 from app.models.saved_report import SavedReport, SavedReportIndicator
@@ -19,7 +19,9 @@ __all__ = [
     "DashboardWidget",
     "ImportBatch",
     "LoanAccountLink",
+    "LoanLossWriteoff",
     "LoanPerson",
+    "LoanSettings",
     "ReportIndicator",
     "ReportIndicatorTerm",
     "ReserveBox",

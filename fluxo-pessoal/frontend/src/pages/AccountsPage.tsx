@@ -10,12 +10,17 @@ import { Modal } from "../components/ui/Modal";
 import { PageToolbar } from "../components/ui/PageToolbar";
 import { money } from "../services/api";
 import { accountsService } from "../services/accountsService";
+import { chartAccountsService } from "../services/chartAccountsService";
 import { reserveBoxesService, type ReserveBoxPayload } from "../services/reserveBoxesService";
 import type { Account } from "../types/account";
+import type { ChartAccount } from "../types/chartAccount";
 import type { ReserveBox } from "../types/reserveBox";
 
 const emptyReserve: ReserveBoxPayload = {
   account_id: 0,
+  chart_account_id: null,
+  withdrawal_chart_account_id: null,
+  auto_create_chart_accounts: true,
   name: "",
   current_balance: "0.00",
   target_amount: "",
@@ -34,6 +39,7 @@ export function AccountsPage() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: accountsService.list });
   const balances = useQuery({ queryKey: ["account-balances"], queryFn: accountsService.balances });
   const reserveBoxes = useQuery({ queryKey: ["reserve-boxes"], queryFn: () => reserveBoxesService.list() });
+  const chartAccounts = useQuery({ queryKey: ["chart-accounts"], queryFn: () => chartAccountsService.list() });
 
   const balancesById = useMemo(() => new Map((balances.data ?? []).map((item) => [item.id, item])), [balances.data]);
   const accountsById = useMemo(() => new Map((accounts.data ?? []).map((item) => [item.id, item])), [accounts.data]);
@@ -43,6 +49,9 @@ export function AccountsPage() {
       selectedReserve
         ? {
             account_id: selectedReserve.account_id,
+            chart_account_id: selectedReserve.chart_account_id,
+            withdrawal_chart_account_id: selectedReserve.withdrawal_chart_account_id,
+            auto_create_chart_accounts: false,
             name: selectedReserve.name,
             current_balance: selectedReserve.current_balance,
             target_amount: selectedReserve.target_amount ?? "",
@@ -70,10 +79,13 @@ export function AccountsPage() {
 
   const saveReserveMutation = useMutation({
     mutationFn: () => {
-      const payload = {
+      const payload: ReserveBoxPayload = {
         ...reserveForm,
         target_amount: reserveForm.target_amount || null,
-        notes: reserveForm.notes || null
+        notes: reserveForm.notes || null,
+        chart_account_id: reserveForm.auto_create_chart_accounts ? null : reserveForm.chart_account_id,
+        withdrawal_chart_account_id: reserveForm.auto_create_chart_accounts ? null : reserveForm.withdrawal_chart_account_id,
+        auto_create_chart_accounts: selectedReserve ? false : reserveForm.auto_create_chart_accounts
       };
       return selectedReserve ? reserveBoxesService.update(selectedReserve.id, payload) : reserveBoxesService.create(payload);
     },
@@ -81,6 +93,7 @@ export function AccountsPage() {
       setSelectedReserve(null);
       setReserveOpen(false);
       invalidateMoney(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["chart-accounts"] });
     }
   });
 
@@ -217,6 +230,8 @@ export function AccountsPage() {
                       </div>
                       <div className="mt-4 text-2xl font-black text-emerald-700">{money(box.current_balance)}</div>
                       {box.target_amount && <div className="mt-1 text-sm font-semibold text-gray-500">Meta: {money(box.target_amount)}</div>}
+                      {box.chart_account_code && <div className="mt-1 text-xs font-bold text-violet-700">Entrada: {box.chart_account_code} - {box.chart_account_name}</div>}
+                      {box.withdrawal_chart_account_code && <div className="mt-1 text-xs font-bold text-sky-700">Saida: {box.withdrawal_chart_account_code} - {box.withdrawal_chart_account_name}</div>}
                       {box.notes && <p className="mt-2 text-sm text-gray-600">{box.notes}</p>}
                       <div className="mt-4 flex gap-2">
                         <Button
@@ -282,7 +297,7 @@ export function AccountsPage() {
             </>
           }
         >
-          <ReserveBoxForm value={reserveForm} onChange={setReserveForm} accounts={accounts.data ?? []} />
+          <ReserveBoxForm value={reserveForm} onChange={setReserveForm} accounts={accounts.data ?? []} chartAccounts={chartAccounts.data ?? []} canAutoCreate={!selectedReserve} />
         </Modal>
       )}
     </div>
@@ -292,12 +307,18 @@ export function AccountsPage() {
 function ReserveBoxForm({
   value,
   onChange,
-  accounts
+  accounts,
+  chartAccounts,
+  canAutoCreate
 }: {
   value: ReserveBoxPayload;
   onChange: (value: ReserveBoxPayload) => void;
   accounts: Account[];
+  chartAccounts: ChartAccount[];
+  canAutoCreate: boolean;
 }) {
+  const reserveChartAccounts = chartAccounts.filter((account) => account.account_nature === "transfer" && account.is_active);
+  const autoCreate = canAutoCreate && Boolean(value.auto_create_chart_accounts);
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <Select label="Conta vinculada" value={value.account_id || ""} onChange={(event) => onChange({ ...value, account_id: Number(event.target.value) })} required>
@@ -305,6 +326,22 @@ function ReserveBoxForm({
         {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
       </Select>
       <Input label="Nome da caixinha" value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} placeholder="Casa, Moto, Reserva..." required />
+      {canAutoCreate && <label className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 md:col-span-2">
+        <input
+          type="checkbox"
+          checked={autoCreate}
+          onChange={(event) => onChange({ ...value, auto_create_chart_accounts: event.target.checked })}
+        />
+        Criar classificacoes automaticamente: Para [nome] e Uso da Reserva [nome]
+      </label>}
+      <Select label="Quando guarda na caixinha" value={value.chart_account_id ?? ""} onChange={(event) => onChange({ ...value, chart_account_id: event.target.value ? Number(event.target.value) : null })} disabled={autoCreate}>
+        <option value="">Sem vinculo</option>
+        {reserveChartAccounts.filter((item) => item.code === "5.2" || item.code.startsWith("5.2.")).map((item) => <option key={item.id} value={item.id}>{item.code} - {item.name}</option>)}
+      </Select>
+      <Select label="Quando retira da caixinha" value={value.withdrawal_chart_account_id ?? ""} onChange={(event) => onChange({ ...value, withdrawal_chart_account_id: event.target.value ? Number(event.target.value) : null })} disabled={autoCreate}>
+        <option value="">Sem vinculo</option>
+        {reserveChartAccounts.filter((item) => item.code === "5.3" || item.code.startsWith("5.3.")).map((item) => <option key={item.id} value={item.id}>{item.code} - {item.name}</option>)}
+      </Select>
       <Input label="Valor atual" type="number" step="0.01" value={value.current_balance} onChange={(event) => onChange({ ...value, current_balance: event.target.value })} />
       <Input label="Meta" type="number" step="0.01" value={value.target_amount ?? ""} onChange={(event) => onChange({ ...value, target_amount: event.target.value })} />
       <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 md:col-span-2">

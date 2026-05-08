@@ -3,6 +3,9 @@ import type { ReserveBox } from "../types/reserveBox";
 
 export type ReserveBoxPayload = {
   account_id: number;
+  chart_account_id?: number | null;
+  withdrawal_chart_account_id?: number | null;
+  auto_create_chart_accounts?: boolean;
   name: string;
   current_balance: string;
   target_amount?: string | null;
