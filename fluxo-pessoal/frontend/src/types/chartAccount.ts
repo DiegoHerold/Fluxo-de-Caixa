@@ -1,4 +1,4 @@
-export type AccountNature = "income" | "expense" | "transfer" | "reserve" | "adjustment" | "liability";
+export type AccountNature = "income" | "expense" | "transfer" | "reserve" | "adjustment" | "liability" | "loan";
 
 export interface ChartAccount {
   id: number;

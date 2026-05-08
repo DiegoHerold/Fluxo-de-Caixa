@@ -6,6 +6,7 @@ import { ChartAccountsPage } from "../pages/ChartAccountsPage";
 import { ClassificationRulesPage } from "../pages/ClassificationRulesPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { ImportPage } from "../pages/ImportPage";
+import { LoansPage } from "../pages/LoansPage";
 import { PendingTransactionsPage } from "../pages/PendingTransactionsPage";
 import { ReportIndicatorsPage } from "../pages/ReportIndicatorsPage";
 import { ReportsPage } from "../pages/ReportsPage";
@@ -19,6 +20,7 @@ export function AppRoutes() {
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="imports" element={<ImportPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="loans" element={<LoansPage />} />
         <Route path="pending" element={<PendingTransactionsPage />} />
         <Route path="chart-accounts" element={<ChartAccountsPage />} />
         <Route path="indicators" element={<ReportIndicatorsPage />} />

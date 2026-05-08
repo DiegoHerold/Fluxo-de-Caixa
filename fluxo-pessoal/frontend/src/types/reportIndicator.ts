@@ -1,4 +1,4 @@
-export type FormulaOperation = "add" | "subtract";
+export type FormulaOperation = "add" | "subtract" | "multiply" | "divide";
 export type FormulaValueMode = "net" | "inflow" | "outflow" | "absolute";
 export type IndicatorResultFormat = "currency" | "number" | "percent";
 

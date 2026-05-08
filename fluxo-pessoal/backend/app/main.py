@@ -11,6 +11,7 @@ from app.routes.chart_accounts_routes import router as chart_accounts_router
 from app.routes.classification_rules_routes import router as classification_rules_router
 from app.routes.dashboard_widgets_routes import router as dashboard_widgets_router
 from app.routes.imports_routes import router as imports_router
+from app.routes.loans_routes import router as loans_router
 from app.routes.report_indicators_routes import router as report_indicators_router
 from app.routes.reports_routes import router as reports_router
 from app.routes.reserve_boxes_routes import router as reserve_boxes_router
@@ -37,6 +38,7 @@ app.include_router(accounts_router, prefix=settings.api_prefix)
 app.include_router(chart_accounts_router, prefix=settings.api_prefix)
 app.include_router(transactions_router, prefix=settings.api_prefix)
 app.include_router(imports_router, prefix=settings.api_prefix)
+app.include_router(loans_router, prefix=settings.api_prefix)
 app.include_router(classification_rules_router, prefix=settings.api_prefix)
 app.include_router(reports_router, prefix=settings.api_prefix)
 app.include_router(report_indicators_router, prefix=settings.api_prefix)

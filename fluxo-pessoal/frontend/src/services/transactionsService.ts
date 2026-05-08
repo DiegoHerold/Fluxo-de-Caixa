@@ -6,6 +6,7 @@ export type TransactionFilters = {
   chart_account_id?: number;
   status?: ClassificationStatus;
   transaction_type?: TransactionType;
+  search?: string;
   start_date?: string;
   end_date?: string;
 };

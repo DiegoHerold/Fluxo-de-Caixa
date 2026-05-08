@@ -23,7 +23,8 @@ const natureLabel: Record<AccountNature, string> = {
   transfer: "Transferência",
   reserve: "Reserva",
   adjustment: "Ajuste",
-  liability: "Obrigação"
+  liability: "Obrigação",
+  loan: "Empréstimos"
 };
 
 const natureTone: Record<AccountNature, string> = {
@@ -32,7 +33,8 @@ const natureTone: Record<AccountNature, string> = {
   transfer: "bg-sky-50 text-sky-700 border-sky-200",
   reserve: "bg-violet-50 text-violet-700 border-violet-200",
   adjustment: "bg-amber-50 text-amber-700 border-amber-200",
-  liability: "bg-slate-100 text-slate-700 border-slate-200"
+  liability: "bg-slate-100 text-slate-700 border-slate-200",
+  loan: "bg-cyan-50 text-cyan-700 border-cyan-200"
 };
 
 export function ChartAccountsPage() {
@@ -227,6 +229,7 @@ function ChartAccountForm({
         <option value="reserve">Reserva</option>
         <option value="adjustment">Ajuste</option>
         <option value="liability">Obrigação</option>
+        <option value="loan">Empréstimos / valores a receber</option>
       </Select>
       <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 md:col-span-2">
         <input type="checkbox" checked={form.is_active} onChange={(event) => onChange({ ...form, is_active: event.target.checked })} />

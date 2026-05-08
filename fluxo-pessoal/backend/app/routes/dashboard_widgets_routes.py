@@ -14,8 +14,13 @@ def list_dashboard_widgets(include_inactive: bool = False, db: Session = Depends
 
 
 @router.get("/evaluate", response_model=list[DashboardWidgetEvaluation])
-def evaluate_dashboard_widgets(month: str = Query(..., pattern=r"^\d{4}-\d{2}$"), db: Session = Depends(get_db)):
-    return DashboardWidgetService(db).evaluate(month)
+def evaluate_dashboard_widgets(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    start_month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    end_month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    db: Session = Depends(get_db),
+):
+    return DashboardWidgetService(db).evaluate(month=month, start_month=start_month, end_month=end_month)
 
 
 @router.post("", response_model=DashboardWidgetRead)

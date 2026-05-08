@@ -1,5 +1,5 @@
-import { Calculator, Edit3, Eye, EyeOff, Plus, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Calculator, Divide, Edit3, Eye, EyeOff, FunctionSquare, ListTree, Plus, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -29,8 +29,33 @@ const emptyForm: ReportIndicatorPayload = {
 
 const operationLabels: Record<FormulaOperation, string> = {
   add: "Somar",
-  subtract: "Subtrair"
+  subtract: "Subtrair",
+  multiply: "Multiplicar",
+  divide: "Dividir"
 };
+
+const formulaExamples = [
+  {
+    title: "Sobra real",
+    expression: "[1 - Receitas] - [2 - Despesas fixas] - [3 - Despesas variaveis] - [4 - Dividas e obrigacoes]"
+  },
+  {
+    title: "% comprometido",
+    expression: "pct([2 - Despesas fixas] + [3 - Despesas variaveis] + [4 - Dividas e obrigacoes], [1 - Receitas])"
+  },
+  {
+    title: "Limite de alerta",
+    expression: "ifelse([3 - Despesas variaveis] > [1 - Receitas] * 0.35, 1, 0)"
+  }
+];
+
+const functionHelp = [
+  "pct(a,b): transforma a / b em percentual.",
+  "safe_div(a,b): divide sem erro quando b for zero.",
+  "min/max/abs/round: menor, maior, absoluto e arredondamento.",
+  "clamp(valor,min,max): prende um valor dentro de uma faixa.",
+  "ifelse(condicao,a,b): retorna a se a condicao for verdadeira, senao b."
+];
 
 const valueModeLabels: Record<FormulaValueMode, string> = {
   inflow: "Entradas",
@@ -58,7 +83,7 @@ export function ReportIndicatorsPage() {
       description: selected.description ?? "",
       result_label: selected.result_label,
       result_format: selected.result_format,
-      formula_expression: selected.formula_expression ?? "",
+      formula_expression: selected.formula_expression ?? null,
       positive_is_good: selected.positive_is_good,
       include_internal_transfers: selected.include_internal_transfers,
       show_on_dashboard: selected.show_on_dashboard,
@@ -237,10 +262,23 @@ function IndicatorForm({
   chartAccounts: ChartAccount[];
   onChange: (form: ReportIndicatorPayload) => void;
 }) {
+  const advancedMode = form.formula_expression !== null;
+  const variableOptions = useMemo(() => buildVariableOptions(chartAccounts), [chartAccounts]);
   const addTerm = () => {
     const chartAccountId = chartAccounts[0]?.id;
     if (!chartAccountId) return;
     onChange({ ...form, terms: [...form.terms, newTerm(chartAccountId, form.terms.length)] });
+  };
+  const switchToManual = () => {
+    const firstChartAccountId = chartAccounts[0]?.id;
+    onChange({
+      ...form,
+      formula_expression: null,
+      terms: form.terms.length || !firstChartAccountId ? form.terms : [newTerm(firstChartAccountId)]
+    });
+  };
+  const switchToAdvanced = () => {
+    onChange({ ...form, formula_expression: form.formula_expression ?? "", terms: [] });
   };
 
   return (
@@ -266,17 +304,78 @@ function IndicatorForm({
             onChange={(event) => onChange({ ...form, description: event.target.value })}
           />
         </label>
+        <div className="grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 md:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-gray-950">Modo de calculo</div>
+              <div className="text-xs text-gray-500">Escolha termos manuais ou uma formula avancada. Um modo substitui o outro.</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant={!advancedMode ? "primary" : "secondary"} icon={<ListTree size={15} />} onClick={switchToManual}>
+                Manual
+              </Button>
+              <Button type="button" variant={advancedMode ? "primary" : "secondary"} icon={<FunctionSquare size={15} />} onClick={switchToAdvanced}>
+                Formula
+              </Button>
+            </div>
+          </div>
+        </div>
+        {advancedMode && (
         <label className="grid gap-1 text-sm font-medium text-gray-700 md:col-span-2">
           <span>Expressão avançada</span>
-          <textarea
-            className="min-h-20 rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            placeholder="Ex.: receita - fixas - (variaveis * 1.15) ou pct(fixas + variaveis, receita)"
+          <FormulaExpressionEditor
             value={form.formula_expression ?? ""}
-            onChange={(event) => onChange({ ...form, formula_expression: event.target.value })}
+            options={variableOptions}
+            onChange={(formulaExpression) => onChange({ ...form, formula_expression: formulaExpression, terms: [] })}
           />
-          <span className="text-xs text-gray-500">Use as chaves dos termos. Funções: pct(a,b), safe_div(a,b), min, max, abs, round, clamp, ifelse.</span>
+          <span className="text-xs text-gray-500">Use chaves dos termos, variaveis do plano como c_1 ou referencias entre colchetes como [1 - Receitas]. Funcoes: pct(a,b), safe_div(a,b), min, max, abs, round, clamp, ifelse.</span>
         </label>
+        )}
       </div>
+
+      <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+        <div className="text-sm font-black text-sky-950">Variaveis automaticas do plano</div>
+        <div className="mt-2 grid gap-2 text-xs font-semibold text-sky-900 md:grid-cols-2">
+          {chartAccounts.slice(0, 10).map((account) => (
+            <div key={account.id} className="rounded-lg bg-white px-3 py-2">
+              <span className="font-mono">{accountFormulaVariable(account)}</span>
+              <span className="text-sky-700"> ou [{account.code} - {account.name}]</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-xs text-sky-800">
+          Cada variavel soma a conta e seus filhos no periodo filtrado. Prefixos disponiveis: entrada_, saida_, liquido_ e abs_.
+        </div>
+      </div>
+
+      {advancedMode && (
+        <div className="grid gap-3 lg:grid-cols-[1fr_1.1fr]">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <div className="text-sm font-black text-emerald-950">Funcoes disponiveis</div>
+            <div className="mt-2 grid gap-2">
+              {functionHelp.map((item) => (
+                <div key={item} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-emerald-900">{item}</div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-3">
+            <div className="text-sm font-black text-gray-950">Exemplos de formulas</div>
+            <div className="mt-2 grid gap-2">
+              {formulaExamples.map((example) => (
+                <button
+                  key={example.title}
+                  type="button"
+                  className="grid gap-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition hover:border-emerald-300 hover:bg-emerald-50"
+                  onClick={() => onChange({ ...form, formula_expression: example.expression, terms: [] })}
+                >
+                  <span className="text-xs font-black text-gray-950">{example.title}</span>
+                  <span className="font-mono text-xs text-gray-600">{example.expression}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 md:grid-cols-2">
         <CheckItem label="Mostrar no Dashboard" checked={form.show_on_dashboard} onChange={(checked) => onChange({ ...form, show_on_dashboard: checked })} />
@@ -285,6 +384,7 @@ function IndicatorForm({
         <CheckItem label="Indicador ativo" checked={form.is_active} onChange={(checked) => onChange({ ...form, is_active: checked })} />
       </div>
 
+      {!advancedMode && (
       <div className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -311,6 +411,7 @@ function IndicatorForm({
           />
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -338,6 +439,8 @@ function FormulaTermEditor({
         <Select label="Operação" value={term.operation} onChange={(event) => onChange({ ...term, operation: event.target.value as FormulaOperation })}>
           <option value="add">Somar</option>
           <option value="subtract">Subtrair</option>
+          <option value="multiply">Multiplicar</option>
+          <option value="divide">Dividir</option>
         </Select>
         <Select label="Plano de contas" value={term.chart_account_id} onChange={(event) => onChange({ ...term, chart_account_id: Number(event.target.value) })}>
           {chartAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} - {account.name}</option>)}
@@ -357,6 +460,93 @@ function FormulaTermEditor({
         <CheckItem label="Incluir subcontas" checked={term.include_children} onChange={(checked) => onChange({ ...term, include_children: checked })} />
       </div>
     </div>
+  );
+}
+
+type FormulaVariableOption = {
+  insert: string;
+  label: string;
+  detail: string;
+  search: string;
+};
+
+function FormulaExpressionEditor({
+  value,
+  options,
+  onChange
+}: {
+  value: string;
+  options: FormulaVariableOption[];
+  onChange: (value: string) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [cursor, setCursor] = useState(value.length);
+  const slashQuery = slashSearch(value, cursor);
+  const filteredOptions = slashQuery === null
+    ? []
+    : options
+      .filter((option) => option.search.includes(normalizeSearch(slashQuery)))
+      .slice(0, 8);
+
+  const selectOption = (option: FormulaVariableOption) => {
+    const slashIndex = value.lastIndexOf("/", cursor - 1);
+    const nextValue = `${value.slice(0, slashIndex)}${option.insert}${value.slice(cursor)}`;
+    const nextCursor = slashIndex + option.insert.length;
+    onChange(nextValue);
+    setCursor(nextCursor);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  };
+
+  return (
+    <span className="relative grid gap-2">
+      <textarea
+        ref={textareaRef}
+        className="min-h-24 rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+        placeholder="Digite / para buscar uma classificacao. Ex.: pct(/1, /2)"
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setCursor(event.target.selectionStart ?? event.target.value.length);
+        }}
+        onClick={(event) => setCursor(event.currentTarget.selectionStart ?? value.length)}
+        onKeyUp={(event) => setCursor(event.currentTarget.selectionStart ?? value.length)}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === "Tab") && filteredOptions[0]) {
+            event.preventDefault();
+            selectOption(filteredOptions[0]);
+          }
+          if (event.key === "Escape") {
+            setCursor(0);
+          }
+        }}
+      />
+      {slashQuery !== null && (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+          {filteredOptions.length ? filteredOptions.map((option) => (
+            <button
+              key={option.insert}
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-emerald-50"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                selectOption(option);
+              }}
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-bold text-gray-900">{option.label}</span>
+                <span className="block truncate text-xs text-gray-500">{option.detail}</span>
+              </span>
+              <Divide size={15} className="shrink-0 text-emerald-600" />
+            </button>
+          )) : (
+            <div className="px-3 py-2 text-sm font-semibold text-gray-500">Nenhuma variavel encontrada.</div>
+          )}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -383,12 +573,45 @@ function newTerm(chartAccountId: number, position = 0): ReportIndicatorTermPaylo
   };
 }
 
+function accountFormulaVariable(account: ChartAccount): string {
+  return `c_${account.code.replace(/\./g, "_")}`;
+}
+
+function buildVariableOptions(accounts: ChartAccount[]): FormulaVariableOption[] {
+  return accounts.map((account) => {
+    const variable = accountFormulaVariable(account);
+    const bracket = `[${account.code} - ${account.name}]`;
+    return {
+      insert: bracket,
+      label: `${account.code} - ${account.name}`,
+      detail: `${variable} soma a classificacao e os filhos`,
+      search: normalizeSearch(`${account.code} ${account.name} ${variable} ${bracket}`)
+    };
+  });
+}
+
+function slashSearch(value: string, cursor: number): string | null {
+  const slashIndex = value.lastIndexOf("/", cursor - 1);
+  if (slashIndex < 0) return null;
+  const fragment = value.slice(slashIndex + 1, cursor);
+  if (/[\n()[\],+\-*]/.test(fragment)) return null;
+  return fragment;
+}
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function normalizePayload(form: ReportIndicatorPayload): ReportIndicatorPayload {
+  const formulaExpression = form.formula_expression?.trim() || null;
   return {
     ...form,
     description: form.description?.trim() || null,
-    formula_expression: form.formula_expression?.trim() || null,
-    terms: form.terms.map((term, position) => ({
+    formula_expression: formulaExpression,
+    terms: formulaExpression ? [] : form.terms.map((term, position) => ({
       ...term,
       label: term.label?.trim() || null,
       variable_key: term.variable_key?.trim() || null,
@@ -400,5 +623,7 @@ function normalizePayload(form: ReportIndicatorPayload): ReportIndicatorPayload 
 }
 
 function canSave(form: ReportIndicatorPayload) {
-  return Boolean(form.name.trim() && form.result_label.trim() && form.terms.length && form.terms.every((term) => term.chart_account_id));
+  const hasFormula = Boolean(form.formula_expression?.trim());
+  const hasTerms = form.terms.length > 0 && form.terms.every((term) => term.chart_account_id);
+  return Boolean(form.name.trim() && form.result_label.trim() && (hasFormula || hasTerms));
 }

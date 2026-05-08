@@ -22,6 +22,7 @@ class AccountNature(StrEnum):
     reserve = "reserve"
     adjustment = "adjustment"
     liability = "liability"
+    loan = "loan"
 
 
 class TransactionType(StrEnum):
@@ -81,6 +82,8 @@ class TransferStatus(StrEnum):
 class FormulaOperation(StrEnum):
     add = "add"
     subtract = "subtract"
+    multiply = "multiply"
+    divide = "divide"
 
 
 class FormulaValueMode(StrEnum):
@@ -102,3 +105,8 @@ class DashboardWidgetType(StrEnum):
     account_balances = "account_balances"
     reserve_boxes = "reserve_boxes"
     report_download = "report_download"
+
+
+class LoanMovementEffect(StrEnum):
+    increase = "increase"
+    decrease = "decrease"

@@ -24,7 +24,10 @@ class DashboardWidgetService:
             stmt = stmt.where(DashboardWidget.is_active.is_(True))
         return [DashboardWidgetRead.model_validate(item) for item in self.db.scalars(stmt)]
 
-    def evaluate(self, month: str) -> list[DashboardWidgetEvaluation]:
+    def evaluate(self, month: str | None = None, start_month: str | None = None, end_month: str | None = None) -> list[DashboardWidgetEvaluation]:
+        start = end = None
+        if start_month or end_month:
+            start, end = self.indicator_service._period_bounds(month, start_month, end_month)
         stmt = (
             select(DashboardWidget)
             .options(selectinload(DashboardWidget.indicator), selectinload(DashboardWidget.saved_report))
@@ -36,9 +39,10 @@ class DashboardWidgetService:
             indicator = None
             export_url = None
             if widget.widget_type == DashboardWidgetType.indicator and widget.indicator:
-                indicator = self.indicator_service._evaluate_indicator(widget.indicator, month)
+                indicator = self.indicator_service._evaluate_indicator(widget.indicator, month, start=start, end=end)
             if widget.widget_type == DashboardWidgetType.report_download and widget.saved_report_id:
-                export_url = f"/api/saved-reports/{widget.saved_report_id}/export-excel?month={month}"
+                export_month = month or end_month or start_month
+                export_url = f"/api/saved-reports/{widget.saved_report_id}/export-excel?month={export_month}"
             widgets.append(
                 DashboardWidgetEvaluation(
                     **DashboardWidgetRead.model_validate(widget).model_dump(),

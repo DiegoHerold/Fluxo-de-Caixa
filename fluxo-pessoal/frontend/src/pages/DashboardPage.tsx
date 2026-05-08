@@ -1,5 +1,5 @@
-import { AlertTriangle, ArrowDownToLine, Calculator, EyeOff, Landmark, Maximize2, Minimize2, PiggyBank, Settings2, WalletCards } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, ArrowDownToLine, Calculator, CalendarRange, EyeOff, Landmark, Maximize2, Minimize2, PiggyBank, Settings2, WalletCards } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../components/ui/Button";
 import { StatCard } from "../components/ui/StatCard";
@@ -7,17 +7,22 @@ import { currentMonth, formatValue, money } from "../services/api";
 import { accountsService } from "../services/accountsService";
 import { balancesService } from "../services/balancesService";
 import { dashboardWidgetsService } from "../services/dashboardWidgetsService";
+import { loansService } from "../services/loansService";
 import { savedReportsService } from "../services/savedReportsService";
 import type { DashboardWidgetEvaluation } from "../types/dashboardWidget";
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
-  const [month, setMonth] = useState(currentMonth());
+  const [periodMode, setPeriodMode] = useState<"month" | "quarter" | "year" | "custom">("month");
+  const [startMonth, setStartMonth] = useState(currentMonth());
+  const [endMonth, setEndMonth] = useState(currentMonth());
   const [organizing, setOrganizing] = useState(false);
-  const widgets = useQuery({ queryKey: ["dashboard-widgets", month], queryFn: () => dashboardWidgetsService.evaluate(month) });
+  const period = useMemo(() => buildDashboardPeriod(periodMode, startMonth, endMonth), [periodMode, startMonth, endMonth]);
+  const widgets = useQuery({ queryKey: ["dashboard-widgets", period.params], queryFn: () => dashboardWidgetsService.evaluate(period.params) });
   const balances = useQuery({ queryKey: ["account-balances"], queryFn: accountsService.balances });
   const consolidated = useQuery({ queryKey: ["consolidated-balance"], queryFn: accountsService.consolidated });
   const snapshots = useQuery({ queryKey: ["snapshots"], queryFn: balancesService.snapshots });
+  const loanPeople = useQuery({ queryKey: ["loan-people"], queryFn: () => loansService.people(false) });
 
   const updateWidget = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<DashboardWidgetEvaluation> }) => dashboardWidgetsService.update(id, payload),
@@ -31,32 +36,62 @@ export function DashboardPage() {
 
   const divergent = snapshots.data?.filter((item) => item.status === "divergent").length ?? 0;
   const reserves = consolidated.data?.reserves ?? [];
+  const loanReceivable = (loanPeople.data ?? []).reduce((total, person) => total + Math.max(Number(person.current_balance), 0), 0);
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="month"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-            className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
-          />
-          <a href={savedReportsService.defaultExportExcelUrl(month)}>
-            <Button variant="secondary" icon={<ArrowDownToLine size={16} />}>Baixar relatorio padrao</Button>
-          </a>
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-black text-gray-950">
+              <CalendarRange size={17} />
+              Periodo de analise
+            </div>
+            <div className="mt-1 text-sm font-semibold text-gray-500">{period.label}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant={periodMode === "month" ? "primary" : "secondary"} onClick={() => setPeriodMode("month")}>Mes</Button>
+            <Button type="button" variant={periodMode === "quarter" ? "primary" : "secondary"} onClick={() => setPeriodMode("quarter")}>3 meses</Button>
+            <Button type="button" variant={periodMode === "year" ? "primary" : "secondary"} onClick={() => setPeriodMode("year")}>12 meses</Button>
+            <Button type="button" variant={periodMode === "custom" ? "primary" : "secondary"} onClick={() => setPeriodMode("custom")}>Personalizado</Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" icon={<Settings2 size={16} />} onClick={() => setOrganizing((value) => !value)}>
-            {organizing ? "Concluir organizacao" : "Organizar dashboard"}
-          </Button>
-          {!widgets.data?.length && (
-            <Button icon={<Calculator size={16} />} onClick={() => seedWidgets.mutate()} disabled={seedWidgets.isPending}>
-              Montar dashboard
+
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-wrap gap-3">
+            {periodMode === "custom" && (
+              <label className="grid gap-1 text-sm font-medium text-gray-700">
+                <span>Inicio</span>
+                <input type="month" value={startMonth} onChange={(event) => setStartMonth(event.target.value)} className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2" />
+              </label>
+            )}
+            <label className="grid gap-1 text-sm font-medium text-gray-700">
+              <span>{periodMode === "month" ? "Mes" : "Ate"}</span>
+              <input type="month" value={endMonth} onChange={(event) => setEndMonth(event.target.value)} className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2" />
+            </label>
+            <a className="flex items-end" href={savedReportsService.defaultExportExcelUrl(period.exportMonth)}>
+              <Button variant="secondary" icon={<ArrowDownToLine size={16} />}>Baixar mes final</Button>
+            </a>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" icon={<Settings2 size={16} />} onClick={() => setOrganizing((value) => !value)}>
+              {organizing ? "Concluir organizacao" : "Organizar"}
             </Button>
-          )}
+            {!widgets.data?.length && (
+              <Button icon={<Calculator size={16} />} onClick={() => seedWidgets.mutate()} disabled={seedWidgets.isPending}>
+                Montar dashboard
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total com caixinhas" value={money(consolidated.data?.consolidated_balance)} icon={<WalletCards size={18} />} tone="emerald" />
+        <StatCard label="Disponivel em contas" value={money(consolidated.data?.available_balance)} icon={<Landmark size={18} />} tone="sky" />
+        <StatCard label="Caixinhas estimadas" value={money(consolidated.data?.reserve_balance)} icon={<PiggyBank size={18} />} tone="violet" />
+        <StatCard label="A receber emprestimos" value={money(loanReceivable)} icon={<Calculator size={18} />} tone="amber" />
+      </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {widgets.data?.map((widget, index) => (
@@ -78,12 +113,6 @@ export function DashboardPage() {
             O dashboard ainda nao tem widgets. Use "Montar dashboard" para criar uma primeira organizacao com seus indicadores.
           </div>
         )}
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Total com caixinhas" value={money(consolidated.data?.consolidated_balance)} icon={<WalletCards size={18} />} tone="emerald" />
-        <StatCard label="Disponivel em contas" value={money(consolidated.data?.available_balance)} icon={<Landmark size={18} />} tone="sky" />
-        <StatCard label="Caixinhas estimadas" value={money(consolidated.data?.reserve_balance)} icon={<PiggyBank size={18} />} tone="violet" />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -225,4 +254,37 @@ function WidgetControls({
       <Button type="button" variant="ghost" icon={<EyeOff size={15} />} onClick={onHide}>Ocultar</Button>
     </div>
   );
+}
+
+function buildDashboardPeriod(mode: "month" | "quarter" | "year" | "custom", startMonth: string, endMonth: string) {
+  if (mode === "month") {
+    return {
+      params: { month: endMonth },
+      label: monthLabel(endMonth),
+      exportMonth: endMonth
+    };
+  }
+
+  const computedStart =
+    mode === "custom"
+      ? startMonth
+      : shiftMonth(endMonth, mode === "quarter" ? -2 : -11);
+  const normalizedStart = computedStart <= endMonth ? computedStart : endMonth;
+  const normalizedEnd = computedStart <= endMonth ? endMonth : computedStart;
+  return {
+    params: { start_month: normalizedStart, end_month: normalizedEnd },
+    label: `${monthLabel(normalizedStart)} ate ${monthLabel(normalizedEnd)}`,
+    exportMonth: normalizedEnd
+  };
+}
+
+function shiftMonth(month: string, offset: number): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const value = new Date(year, monthNumber - 1 + offset, 1);
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(month: string): string {
+  const [year, monthNumber] = month.split("-");
+  return `${monthNumber}/${year}`;
 }

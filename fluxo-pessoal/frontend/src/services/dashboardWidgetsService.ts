@@ -6,8 +6,8 @@ export const dashboardWidgetsService = {
     const { data } = await api.get<DashboardWidget[]>("/dashboard-widgets");
     return data;
   },
-  async evaluate(month: string) {
-    const { data } = await api.get<DashboardWidgetEvaluation[]>("/dashboard-widgets/evaluate", { params: { month } });
+  async evaluate(params: { month?: string; start_month?: string; end_month?: string }) {
+    const { data } = await api.get<DashboardWidgetEvaluation[]>("/dashboard-widgets/evaluate", { params });
     return data;
   },
   async create(payload: DashboardWidgetPayload) {

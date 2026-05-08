@@ -70,12 +70,12 @@ DEFAULT_CHART_ACCOUNTS: list[tuple[str, str, str | None, AccountNature]] = [
     ("6.4", "Reembolso recebido", "6", AccountNature.adjustment),
     ("6.5", "Cashback", "6", AccountNature.adjustment),
     # 7 - Valores a Receber
-    ("7", "Valores a Receber", None, AccountNature.income),
-    ("7.1", "Dinheiro emprestado", "7", AccountNature.income),
-    ("7.2", "Recebimento de dinheiro emprestado", "7", AccountNature.income),
-    ("7.3", "Conta dividida a receber", "7", AccountNature.income),
-    ("7.4", "Conta dividida recebida", "7", AccountNature.income),
-    ("7.5", "Valor perdido / não recebido", "7", AccountNature.income),
+    ("7", "Valores a Receber", None, AccountNature.loan),
+    ("7.1", "Dinheiro emprestado", "7", AccountNature.loan),
+    ("7.2", "Recebimento de dinheiro emprestado", "7", AccountNature.loan),
+    ("7.3", "Conta dividida a receber", "7", AccountNature.loan),
+    ("7.4", "Conta dividida recebida", "7", AccountNature.loan),
+    ("7.5", "Valor perdido / não recebido", "7", AccountNature.loan),
     # 8 - Gastos Planejados com Reservas
     ("8", "Gastos Planejados com Reservas", None, AccountNature.reserve),
     ("8.1", "Uso reserva emergência", "8", AccountNature.reserve),
@@ -97,9 +97,13 @@ def seed_default_chart_accounts(db: Session) -> list[ChartAccount]:
     for item in repo.list(include_inactive=True):
         code_to_item.setdefault(item.code, item)
     created: list[ChartAccount] = []
+    updated_existing = False
 
     for code, name, parent_code, nature in DEFAULT_CHART_ACCOUNTS:
         if code in code_to_item:
+            if code.startswith("7") and code_to_item[code].account_nature != nature:
+                code_to_item[code].account_nature = nature
+                updated_existing = True
             continue
         parent_id = code_to_item[parent_code].id if parent_code and parent_code in code_to_item else None
         item = repo.create(
@@ -113,6 +117,8 @@ def seed_default_chart_accounts(db: Session) -> list[ChartAccount]:
         )
         code_to_item[code] = item
         created.append(item)
+    if updated_existing:
+        db.commit()
     return created
 
 

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+import re
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.chart_account import ChartAccount
-from app.models.enums import FormulaOperation, FormulaValueMode
+from app.models.enums import AccountNature, FormulaOperation, FormulaValueMode
 from app.models.report_indicator import ReportIndicator, ReportIndicatorTerm
 from app.models.transaction import Transaction
 from app.schemas.report_indicator_schema import (
@@ -77,7 +78,14 @@ class ReportIndicatorService:
         self.db.commit()
         return deleted
 
-    def evaluate(self, month: str, surface: str | None = None) -> list[ReportIndicatorEvaluation]:
+    def evaluate(
+        self,
+        month: str | None = None,
+        surface: str | None = None,
+        start_month: str | None = None,
+        end_month: str | None = None,
+    ) -> list[ReportIndicatorEvaluation]:
+        start, end = self._period_bounds(month, start_month, end_month)
         stmt = (
             select(ReportIndicator)
             .options(selectinload(ReportIndicator.terms).selectinload(ReportIndicatorTerm.chart_account))
@@ -88,7 +96,7 @@ class ReportIndicatorService:
             stmt = stmt.where(ReportIndicator.show_on_dashboard.is_(True))
         if surface == "reports":
             stmt = stmt.where(ReportIndicator.show_on_reports.is_(True))
-        return [self._evaluate_indicator(item, month) for item in self.db.scalars(stmt)]
+        return [self._evaluate_indicator(item, start=start, end=end) for item in self.db.scalars(stmt)]
 
     def seed_defaults(self) -> list[ReportIndicatorRead]:
         seed_default_chart_accounts(self.db)
@@ -635,14 +643,23 @@ class ReportIndicatorService:
             data["position"] = data.get("position", position)
             item.terms.append(ReportIndicatorTerm(**data))
 
-    def _evaluate_indicator(self, indicator: ReportIndicator, month: str) -> ReportIndicatorEvaluation:
+    def _evaluate_indicator(
+        self,
+        indicator: ReportIndicator,
+        month: str | None = None,
+        *,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> ReportIndicatorEvaluation:
+        if start is None or end is None:
+            start, end = self._period_bounds(month, None, None)
         terms: list[ReportIndicatorTermEvaluation] = []
         result = Decimal("0.00")
-        variables: dict[str, Decimal] = {}
+        variables, account_aliases = self._chart_account_variables(start, end, indicator.include_internal_transfers)
         for term in indicator.terms:
-            amount = self._term_amount(indicator, term, month)
+            amount = self._term_amount(indicator, term, start, end)
             adjusted_amount = amount * term.weight * term.probability
-            contribution = adjusted_amount if term.operation == FormulaOperation.add else -adjusted_amount
+            contribution = self._apply_operation(result, adjusted_amount, term.operation)
             result += contribution
             chart_account = term.chart_account
             variable_key = term.variable_key or self._variable_key(term.label or chart_account.name)
@@ -669,7 +686,8 @@ class ReportIndicatorService:
             )
         if indicator.formula_expression:
             try:
-                result = self.formula_engine.evaluate(indicator.formula_expression, variables)
+                expression = self._replace_account_references(indicator.formula_expression, account_aliases)
+                result = self.formula_engine.evaluate(expression, variables)
             except FormulaError:
                 result = Decimal("0.00")
         return ReportIndicatorEvaluation(
@@ -688,8 +706,20 @@ class ReportIndicatorService:
             terms=terms,
         )
 
-    def _term_amount(self, indicator: ReportIndicator, term: ReportIndicatorTerm, month: str) -> Decimal:
-        start, end = month_bounds(month)
+    def _apply_operation(self, current: Decimal, amount: Decimal, operation: FormulaOperation) -> Decimal:
+        if operation == FormulaOperation.add:
+            return amount
+        if operation == FormulaOperation.subtract:
+            return -amount
+        if operation == FormulaOperation.multiply:
+            return (current * amount) - current
+        if operation == FormulaOperation.divide:
+            if amount == 0:
+                return -current
+            return (current / amount) - current
+        return amount
+
+    def _term_amount(self, indicator: ReportIndicator, term: ReportIndicatorTerm, start: date, end: date) -> Decimal:
         value_expr = self._value_expression(term.value_mode)
         stmt = (
             select(func.coalesce(func.sum(value_expr), 0))
@@ -704,6 +734,127 @@ class ReportIndicatorService:
         if not indicator.include_internal_transfers:
             stmt = stmt.where(Transaction.is_internal_transfer.is_(False))
         return self.db.scalar(stmt) or Decimal("0.00")
+
+    def _period_bounds(
+        self,
+        month: str | None,
+        start_month: str | None,
+        end_month: str | None,
+    ) -> tuple[date, date]:
+        if start_month or end_month:
+            start, _ = month_bounds(start_month or end_month or month)
+            _, end = month_bounds(end_month or start_month or month)
+            return start, end
+        if not month:
+            raise ValueError("Informe month ou start_month/end_month")
+        return month_bounds(month)
+
+    def _chart_account_variables(
+        self,
+        start: date,
+        end: date,
+        include_internal_transfers: bool,
+    ) -> tuple[dict[str, Decimal], dict[str, str]]:
+        accounts = list(self.db.scalars(select(ChartAccount).order_by(ChartAccount.code)))
+        name_counts: dict[str, int] = {}
+        for account in accounts:
+            name_key = self._variable_key(account.name)
+            name_counts[name_key] = name_counts.get(name_key, 0) + 1
+
+        variables: dict[str, Decimal] = {}
+        aliases: dict[str, str] = {}
+        for account in accounts:
+            key = self._account_variable_key(account)
+            variables[key] = self._chart_account_amount(
+                account,
+                self._natural_value_mode(account),
+                start,
+                end,
+                include_internal_transfers,
+            )
+            variables[f"entrada_{key}"] = self._chart_account_amount(
+                account,
+                FormulaValueMode.inflow,
+                start,
+                end,
+                include_internal_transfers,
+            )
+            variables[f"saida_{key}"] = self._chart_account_amount(
+                account,
+                FormulaValueMode.outflow,
+                start,
+                end,
+                include_internal_transfers,
+            )
+            variables[f"liquido_{key}"] = self._chart_account_amount(
+                account,
+                FormulaValueMode.net,
+                start,
+                end,
+                include_internal_transfers,
+            )
+            variables[f"abs_{key}"] = self._chart_account_amount(
+                account,
+                FormulaValueMode.absolute,
+                start,
+                end,
+                include_internal_transfers,
+            )
+
+            for alias in self._account_aliases(account):
+                aliases[normalize_text(alias)] = key
+            name_key = self._variable_key(account.name)
+            if name_counts.get(name_key) == 1:
+                variables[name_key] = variables[key]
+        return variables, aliases
+
+    def _chart_account_amount(
+        self,
+        account: ChartAccount,
+        value_mode: FormulaValueMode,
+        start: date,
+        end: date,
+        include_internal_transfers: bool,
+    ) -> Decimal:
+        value_expr = self._value_expression(value_mode)
+        stmt = (
+            select(func.coalesce(func.sum(value_expr), 0))
+            .select_from(Transaction)
+            .join(ChartAccount, ChartAccount.id == Transaction.chart_account_id)
+            .where(
+                Transaction.transaction_date >= start,
+                Transaction.transaction_date < end,
+                or_(ChartAccount.id == account.id, ChartAccount.code.like(f"{account.code}.%")),
+            )
+        )
+        if not include_internal_transfers:
+            stmt = stmt.where(Transaction.is_internal_transfer.is_(False))
+        return self.db.scalar(stmt) or Decimal("0.00")
+
+    def _natural_value_mode(self, account: ChartAccount) -> FormulaValueMode:
+        if account.account_nature == AccountNature.income:
+            return FormulaValueMode.inflow
+        if account.account_nature in {AccountNature.transfer, AccountNature.adjustment}:
+            return FormulaValueMode.net
+        return FormulaValueMode.outflow
+
+    def _replace_account_references(self, expression: str, aliases: dict[str, str]) -> str:
+        def replace(match: re.Match[str]) -> str:
+            label = normalize_text(match.group(1))
+            return aliases.get(label, match.group(0))
+
+        return re.sub(r"\[([^\]]+)\]", replace, expression)
+
+    def _account_variable_key(self, account: ChartAccount) -> str:
+        return f"c_{account.code.replace('.', '_')}"
+
+    def _account_aliases(self, account: ChartAccount) -> list[str]:
+        return [
+            account.code,
+            f"{account.code} - {account.name}",
+            f"{account.code}-{account.name}",
+            f"{account.code} {account.name}",
+        ]
 
     def _value_expression(self, value_mode: FormulaValueMode):
         if value_mode == FormulaValueMode.inflow:

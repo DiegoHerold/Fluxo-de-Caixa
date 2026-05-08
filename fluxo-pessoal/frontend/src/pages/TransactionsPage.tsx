@@ -1,4 +1,4 @@
-import { Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TransactionsTable } from "../components/tables/TransactionsTable";
@@ -6,7 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
 import { PageToolbar } from "../components/ui/PageToolbar";
-import { money, todayISODate } from "../services/api";
+import { currentMonth, money, todayISODate } from "../services/api";
 import { accountsService } from "../services/accountsService";
 import { chartAccountsService } from "../services/chartAccountsService";
 import { transactionsService, type ManualTransactionPayload, type TransactionFilters, type TransactionSplitPartPayload } from "../services/transactionsService";
@@ -67,6 +67,8 @@ export function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: ["classification-rules"] });
     queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
     queryClient.invalidateQueries({ queryKey: ["reserves"] });
+    queryClient.invalidateQueries({ queryKey: ["loan-people"] });
+    queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
   }
 
   useEffect(() => {
@@ -142,7 +144,19 @@ export function TransactionsPage() {
             </Button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr]">
+            <label className="grid gap-1 text-sm font-medium text-gray-700 md:col-span-2 xl:col-span-1">
+              <span>Pesquisar</span>
+              <span className="relative">
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  className="min-h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 pl-9 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  value={filters.search ?? ""}
+                  onChange={(event) => setFilters({ ...filters, search: event.target.value || undefined })}
+                  placeholder="Descricao, observacao..."
+                />
+              </span>
+            </label>
             <Select label="Conta" value={filters.account_id ?? ""} onChange={(event) => setFilters({ ...filters, account_id: event.target.value ? Number(event.target.value) : undefined })}>
               <option value="">Todas</option>
               {accounts.data?.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
@@ -171,9 +185,18 @@ export function TransactionsPage() {
             <Input label="Fim" type="date" value={filters.end_date ?? ""} onChange={(event) => setFilters({ ...filters, end_date: event.target.value || undefined })} />
           </div>
 
-          <div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, ...monthFilter(currentMonth()) })}>
+              Mes atual
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, ...lastDaysFilter(90) })}>
+              90 dias
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, status: "pending" })}>
+              Pendentes
+            </Button>
             <Button variant="ghost" icon={<RotateCcw size={16} />} onClick={() => setFilters({})}>
-              Limpar filtros
+              Limpar
             </Button>
           </div>
         </div>
@@ -496,4 +519,22 @@ function toCents(value: string | number | null | undefined): number {
 
 function centsToAmount(cents: number): string {
   return (cents / 100).toFixed(2);
+}
+
+function monthFilter(month: string): Pick<TransactionFilters, "start_date" | "end_date"> {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const start = new Date(year, monthNumber - 1, 1);
+  const end = new Date(year, monthNumber, 0);
+  return { start_date: toISODate(start), end_date: toISODate(end) };
+}
+
+function lastDaysFilter(days: number): Pick<TransactionFilters, "start_date" | "end_date"> {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - days + 1);
+  return { start_date: toISODate(start), end_date: toISODate(end) };
+}
+
+function toISODate(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }

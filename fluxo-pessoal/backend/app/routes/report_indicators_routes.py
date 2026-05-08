@@ -30,11 +30,13 @@ def seed_default_indicators(db: Session = Depends(get_db)):
 
 @router.get("/evaluate", response_model=list[ReportIndicatorEvaluation])
 def evaluate_indicators(
-    month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    start_month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+    end_month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
     surface: str | None = Query(default=None, pattern=r"^(dashboard|reports)$"),
     db: Session = Depends(get_db),
 ):
-    return ReportIndicatorService(db).evaluate(month=month, surface=surface)
+    return ReportIndicatorService(db).evaluate(month=month, start_month=start_month, end_month=end_month, surface=surface)
 
 
 @router.get("/{indicator_id}", response_model=ReportIndicatorRead)

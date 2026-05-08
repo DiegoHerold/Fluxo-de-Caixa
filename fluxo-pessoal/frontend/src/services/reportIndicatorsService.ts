@@ -22,8 +22,9 @@ export const reportIndicatorsService = {
     const { data } = await api.post<ReportIndicator[]>("/report-indicators/seed-default");
     return data;
   },
-  async evaluate(month: string, surface?: "dashboard" | "reports") {
-    const { data } = await api.get<ReportIndicatorEvaluation[]>("/report-indicators/evaluate", { params: { month, surface } });
+  async evaluate(monthOrParams: string | { month?: string; start_month?: string; end_month?: string }, surface?: "dashboard" | "reports") {
+    const params = typeof monthOrParams === "string" ? { month: monthOrParams, surface } : { ...monthOrParams, surface };
+    const { data } = await api.get<ReportIndicatorEvaluation[]>("/report-indicators/evaluate", { params });
     return data;
   }
 };

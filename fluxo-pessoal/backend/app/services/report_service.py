@@ -37,6 +37,7 @@ class ReportService:
             base.where(Transaction.transaction_type == TransactionType.expense, Transaction.is_internal_transfer.is_(False))
         ) or Decimal("0.00")
         obligation_condition = self._obligation_condition()
+        loan_condition = ChartAccount.account_nature == AccountNature.loan
         fixed_expenses = self._real_expense_total(start, end, and_(self._code_root_condition("2"), not_(obligation_condition)))
         variable_expenses = self._real_expense_total(start, end, and_(self._code_root_condition("3"), not_(obligation_condition)))
         obligations = self._real_expense_total(start, end, obligation_condition)
@@ -44,6 +45,7 @@ class ReportService:
             self._code_root_condition("2"),
             self._code_root_condition("3"),
             obligation_condition,
+            loan_condition,
         )
         other_expenses = self._real_expense_total(start, end, or_(ChartAccount.id.is_(None), not_(known_real_expense_condition)))
         total_real_expenses = fixed_expenses + variable_expenses + obligations + other_expenses

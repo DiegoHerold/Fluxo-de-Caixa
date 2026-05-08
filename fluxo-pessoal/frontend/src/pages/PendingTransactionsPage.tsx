@@ -47,6 +47,8 @@ export function PendingTransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["pending-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["classification-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-people"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
     }
   });
 

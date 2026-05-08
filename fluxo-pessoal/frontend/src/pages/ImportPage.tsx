@@ -49,6 +49,8 @@ export function ImportPage() {
       queryClient.invalidateQueries({ queryKey: ["account-balances"] });
       queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
       queryClient.invalidateQueries({ queryKey: ["reserves"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-people"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
     }
   });
 
@@ -71,6 +73,8 @@ export function ImportPage() {
       queryClient.invalidateQueries({ queryKey: ["account-balances"] });
       queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
       queryClient.invalidateQueries({ queryKey: ["reserves"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-people"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
     }
   });
 
@@ -88,6 +92,8 @@ export function ImportPage() {
       queryClient.invalidateQueries({ queryKey: ["account-balances"] });
       queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
       queryClient.invalidateQueries({ queryKey: ["reserves"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-people"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
     }
   });
 

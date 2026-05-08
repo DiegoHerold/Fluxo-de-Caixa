@@ -1,4 +1,4 @@
-import { BarChart3, FileInput, Home, Layers3, ListChecks, PiggyBank, ReceiptText, Repeat2, Scale, Settings2, SlidersHorizontal } from "lucide-react";
+import { BarChart3, FileInput, HandCoins, Home, Layers3, ListChecks, PiggyBank, ReceiptText, Repeat2, Scale, Settings2, SlidersHorizontal } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 const navItems = [
@@ -6,6 +6,7 @@ const navItems = [
   { to: "/accounts", label: "Contas", icon: PiggyBank },
   { to: "/imports", label: "Importar", icon: FileInput },
   { to: "/transactions", label: "Movimentações", icon: ReceiptText },
+  { to: "/loans", label: "Emprestimos", icon: HandCoins },
   { to: "/pending", label: "Pendências", icon: ListChecks },
   { to: "/chart-accounts", label: "Plano", icon: Layers3 },
   { to: "/indicators", label: "Indicadores", icon: SlidersHorizontal },
@@ -19,6 +20,7 @@ const titles: Record<string, string> = {
   "/accounts": "Contas financeiras",
   "/imports": "Importação de extratos",
   "/transactions": "Movimentações",
+  "/loans": "Emprestimos",
   "/pending": "Pendências de classificação",
   "/chart-accounts": "Plano de contas",
   "/indicators": "Indicadores personalizados",

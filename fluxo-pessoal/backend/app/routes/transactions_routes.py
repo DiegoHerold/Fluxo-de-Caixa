@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -101,6 +101,7 @@ def list_transactions(
     status_filter: ClassificationStatus | None = Query(default=None, alias="status"),
     source: TransactionSource | None = None,
     transaction_type: TransactionType | None = None,
+    search: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     limit: int = Query(200, le=1000),
@@ -118,6 +119,14 @@ def list_transactions(
         stmt = stmt.where(Transaction.source == source)
     if transaction_type:
         stmt = stmt.where(Transaction.transaction_type == transaction_type)
+    if search:
+        query = f"%{normalize_text(search)}%"
+        stmt = stmt.where(
+            or_(
+                Transaction.description_clean.like(query),
+                Transaction.notes.ilike(f"%{search.strip()}%"),
+            )
+        )
     if start_date:
         stmt = stmt.where(Transaction.transaction_date >= start_date)
     if end_date:
