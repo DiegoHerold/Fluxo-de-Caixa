@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -23,6 +27,9 @@ from app.services.report_indicator_service import ReportIndicatorService
 from app.services.saved_report_service import SavedReportService
 
 settings = get_settings()
+static_dir = Path(__file__).resolve().parent.parent / "static"
+index_file = static_dir / "index.html"
+assets_dir = static_dir / "assets"
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
@@ -65,9 +72,22 @@ def seed_defaults_on_empty_database() -> None:
 
 @app.get("/")
 def root():
+    if index_file.exists():
+        return FileResponse(index_file)
     return {"name": settings.app_name, "docs": "/docs", "api_prefix": settings.api_prefix}
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+if assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa_fallback(full_path: str):
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"name": settings.app_name, "docs": "/docs", "api_prefix": settings.api_prefix}
