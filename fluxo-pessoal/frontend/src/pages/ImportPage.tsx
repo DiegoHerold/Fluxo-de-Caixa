@@ -8,7 +8,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Modal } from "../components/ui/Modal";
 import { Select } from "../components/ui/Input";
 import { PageToolbar } from "../components/ui/PageToolbar";
-import { formatDateTimeBR } from "../services/api";
+import { currentMonth, formatDateBR, formatDateTimeBR } from "../services/api";
 import { accountsService } from "../services/accountsService";
 import { importsService, type ImportSource } from "../services/importsService";
 
@@ -18,7 +18,10 @@ export function ImportPage() {
   const imports = useQuery({ queryKey: ["imports"], queryFn: importsService.list });
   const [accountId, setAccountId] = useState("");
   const [source, setSource] = useState<ImportSource>("nubank-csv");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [deleteAccountId, setDeleteAccountId] = useState("");
+  const [deleteStartMonth, setDeleteStartMonth] = useState(currentMonth());
+  const [deleteEndMonth, setDeleteEndMonth] = useState(currentMonth());
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const hasMatchingAccount = (accounts.data ?? []).some((account) => {
     const text = `${account.name} ${account.institution ?? ""}`.toLowerCase();
@@ -26,7 +29,19 @@ export function ImportPage() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: () => importsService.upload(source, Number(accountId), file!),
+    mutationFn: async () => {
+      const results: Awaited<ReturnType<typeof importsService.upload>>[] = [];
+      for (const selectedFile of files) {
+        results.push(await importsService.upload(source, Number(accountId), selectedFile));
+      }
+      return {
+        files: results.length,
+        imported_rows: results.reduce((total, result) => total + result.imported_rows, 0),
+        duplicated_rows: results.reduce((total, result) => total + result.duplicated_rows, 0),
+        pending_rows: results.reduce((total, result) => total + result.pending_rows, 0),
+        automatic_rows: results.reduce((total, result) => total + result.automatic_rows, 0)
+      };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["imports"] });
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
@@ -59,6 +74,23 @@ export function ImportPage() {
     }
   });
 
+  const deleteMonthsMutation = useMutation({
+    mutationFn: () =>
+      importsService.removeMonths({
+        account_id: Number(deleteAccountId),
+        start_month: deleteStartMonth,
+        end_month: deleteEndMonth
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["imports"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["account-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["reserves"] });
+    }
+  });
+
   return (
     <div className="grid gap-6">
       <PageToolbar>
@@ -70,7 +102,7 @@ export function ImportPage() {
               setAccountModalOpen(true);
               return;
             }
-            if (file) uploadMutation.mutate();
+            if (files.length) uploadMutation.mutate();
           }}
         >
           <Select label="Conta" value={accountId} onChange={(event) => setAccountId(event.target.value)} required>
@@ -86,10 +118,18 @@ export function ImportPage() {
           </Select>
           <label className="grid gap-1 text-sm font-medium text-gray-700">
             <span>Arquivo</span>
-            <input className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
+            <input
+              className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+              type="file"
+              multiple
+              onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+              required
+            />
           </label>
           <div className="flex items-end">
-            <Button className="w-full" disabled={uploadMutation.isPending} icon={<Upload size={16} />}>Importar</Button>
+            <Button className="w-full" disabled={uploadMutation.isPending || files.length === 0} icon={<Upload size={16} />}>
+              {files.length > 1 ? `Importar ${files.length} arquivos` : "Importar"}
+            </Button>
           </div>
         </form>
 
@@ -105,14 +145,72 @@ export function ImportPage() {
             <Button className="ml-3" type="button" variant="secondary" onClick={() => setAccountModalOpen(true)}>Criar {suggestedAccountName(source)}</Button>
           </div>
         )}
+        <form
+          className="mt-4 grid gap-3 border-t border-gray-200 pt-4 md:grid-cols-[1fr_0.8fr_0.8fr_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!deleteAccountId) return;
+            if (confirm(`Apagar movimentacoes importadas de ${deleteStartMonth} ate ${deleteEndMonth}?`)) {
+              deleteMonthsMutation.mutate();
+            }
+          }}
+        >
+          <Select label="Conta para apagar" value={deleteAccountId} onChange={(event) => setDeleteAccountId(event.target.value)} required>
+            <option value="">Selecione</option>
+            {accounts.data?.map((account) => (
+              <option key={account.id} value={account.id}>{account.name}</option>
+            ))}
+          </Select>
+          <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <span>Mes inicial</span>
+            <input
+              className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              type="month"
+              value={deleteStartMonth}
+              onChange={(event) => setDeleteStartMonth(event.target.value)}
+              required
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-gray-700">
+            <span>Mes final</span>
+            <input
+              className="min-h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              type="month"
+              value={deleteEndMonth}
+              onChange={(event) => setDeleteEndMonth(event.target.value)}
+              required
+            />
+          </label>
+          <div className="flex items-end">
+            <Button
+              className="w-full"
+              type="submit"
+              variant="danger"
+              disabled={deleteMonthsMutation.isPending || !deleteAccountId || deleteStartMonth > deleteEndMonth}
+              icon={<Trash2 size={16} />}
+            >
+              Apagar meses
+            </Button>
+          </div>
+        </form>
       </PageToolbar>
 
       {uploadMutation.data && (
-        <div className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 md:grid-cols-4">
+        <div className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 md:grid-cols-5">
+          <strong>Arquivos: {uploadMutation.data.files}</strong>
           <strong>Importadas: {uploadMutation.data.imported_rows}</strong>
           <span>Duplicadas: {uploadMutation.data.duplicated_rows}</span>
           <span>Pendentes: {uploadMutation.data.pending_rows}</span>
           <span>Automáticas: {uploadMutation.data.automatic_rows}</span>
+        </div>
+      )}
+
+      {deleteMonthsMutation.data && (
+        <div className="grid gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 md:grid-cols-4">
+          <strong>Apagadas: {deleteMonthsMutation.data.deleted_transactions}</strong>
+          <span>Lotes removidos: {deleteMonthsMutation.data.deleted_import_batches}</span>
+          <span>Lotes ajustados: {deleteMonthsMutation.data.updated_import_batches}</span>
+          <span>{formatDateBR(deleteMonthsMutation.data.period_start)} ate {formatDateBR(deleteMonthsMutation.data.period_end)}</span>
         </div>
       )}
 

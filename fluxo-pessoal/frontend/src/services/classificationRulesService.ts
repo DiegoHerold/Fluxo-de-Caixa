@@ -28,6 +28,9 @@ export const classificationRulesService = {
     const { data } = await api.delete<ClassificationRule>(`/classification-rules/${id}`);
     return data;
   },
+  async remove(id: number) {
+    await api.delete(`/classification-rules/${id}/permanent`);
+  },
   async applyToPending() {
     const { data } = await api.post<{ updated: number; remaining_pending: number }>("/classification-rules/apply-to-pending");
     return data;

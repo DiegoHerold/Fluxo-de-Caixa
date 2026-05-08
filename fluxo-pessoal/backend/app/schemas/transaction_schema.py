@@ -10,6 +10,7 @@ from app.models.enums import MatchType
 class TransactionBase(BaseModel):
     account_id: int
     chart_account_id: int | None = None
+    reserve_box_id: int | None = None
     transaction_date: date
     description_original: str = Field(..., min_length=1)
     amount: Decimal
@@ -26,6 +27,7 @@ class ManualTransactionCreate(TransactionBase):
 class TransactionUpdate(BaseModel):
     account_id: int | None = None
     chart_account_id: int | None = None
+    reserve_box_id: int | None = None
     transaction_date: date | None = None
     description_original: str | None = None
     amount: Decimal | None = None
@@ -41,6 +43,7 @@ class TransactionRead(BaseModel):
     account_id: int
     chart_account_id: int | None
     import_batch_id: int | None
+    reserve_box_id: int | None = None
     transaction_date: date
     description_original: str
     description_clean: str
@@ -69,6 +72,7 @@ class TransactionClassifyRequest(BaseModel):
     chart_account_id: int
     transaction_type: TransactionType
     is_internal_transfer: bool = False
+    reserve_box_id: int | None = None
     notes: str | None = None
     create_rule: bool = False
     rule_keyword: str | None = Field(default=None, min_length=2)
@@ -80,3 +84,18 @@ class RuleFromClassificationRequest(BaseModel):
     keyword: str = Field(..., min_length=2)
     match_type: MatchType = MatchType.contains
     priority: int = 100
+
+
+class TransactionSplitItem(BaseModel):
+    description_original: str | None = Field(default=None, min_length=1)
+    amount: Decimal
+    chart_account_id: int | None = None
+    reserve_box_id: int | None = None
+    transaction_type: TransactionType | None = None
+    direction: Direction | None = None
+    is_internal_transfer: bool | None = None
+    notes: str | None = None
+
+
+class TransactionSplitRequest(BaseModel):
+    parts: list[TransactionSplitItem] = Field(..., min_length=2)

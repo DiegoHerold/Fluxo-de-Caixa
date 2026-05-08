@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
@@ -9,13 +9,14 @@ from app.models.account import Account
 from app.models.enums import ClassificationStatus, ImportStatus
 from app.models.import_batch import ImportBatch
 from app.models.transaction import Transaction
-from app.schemas.import_schema import ImportBatchRead, ImportResult
+from app.schemas.import_schema import ImportBatchRead, ImportPeriodDeleteRequest, ImportPeriodDeleteResult, ImportResult
 from app.services.balance_service import BalanceService
 from app.services.classifier_service import ClassifierService
 from app.services.duplicate_service import DuplicateService
 from app.services.importers.mercado_pago_xlsx_importer import MercadoPagoXLSXImporter
 from app.services.importers.nubank_csv_importer import NubankCSVImporter
 from app.services.importers.nubank_ofx_importer import NubankOFXImporter
+from app.utils.dates import month_bounds
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -40,6 +41,42 @@ def list_imports(db: Session = Depends(get_db)):
     return list(db.scalars(select(ImportBatch).order_by(ImportBatch.imported_at.desc())))
 
 
+@router.post("/delete-months", response_model=ImportPeriodDeleteResult)
+def delete_imported_months(payload: ImportPeriodDeleteRequest, db: Session = Depends(get_db)):
+    if not db.get(Account, payload.account_id):
+        raise HTTPException(status_code=404, detail="Conta nao encontrada")
+
+    period_start, _ = month_bounds(payload.start_month)
+    last_month_start, period_end_exclusive = month_bounds(payload.end_month)
+    if period_start > last_month_start:
+        raise HTTPException(status_code=400, detail="Mes inicial deve ser menor ou igual ao mes final")
+
+    stmt = select(Transaction).where(
+        Transaction.account_id == payload.account_id,
+        Transaction.transaction_date >= period_start,
+        Transaction.transaction_date < period_end_exclusive,
+    )
+    if not payload.include_manual:
+        stmt = stmt.where(Transaction.import_batch_id.is_not(None))
+
+    transactions = list(db.scalars(stmt))
+    affected_batch_ids = {tx.import_batch_id for tx in transactions if tx.import_batch_id is not None}
+    for transaction in transactions:
+        db.delete(transaction)
+    db.flush()
+
+    deleted_batches, updated_batches = _refresh_import_batches(db, affected_batch_ids)
+    db.commit()
+    BalanceService(db).recalculate_balances()
+    return ImportPeriodDeleteResult(
+        deleted_transactions=len(transactions),
+        deleted_import_batches=deleted_batches,
+        updated_import_batches=updated_batches,
+        period_start=period_start,
+        period_end=period_end_exclusive - timedelta(days=1),
+    )
+
+
 @router.get("/{batch_id}", response_model=ImportBatchRead)
 def get_import(batch_id: int, db: Session = Depends(get_db)):
     batch = db.get(ImportBatch, batch_id)
@@ -60,6 +97,27 @@ def delete_import_batch(batch_id: int, db: Session = Depends(get_db)):
     db.commit()
     BalanceService(db).recalculate_balances()
     return None
+
+
+def _refresh_import_batches(db: Session, batch_ids: set[int]) -> tuple[int, int]:
+    deleted = 0
+    updated = 0
+    for batch_id in batch_ids:
+        batch = db.get(ImportBatch, batch_id)
+        if not batch:
+            continue
+        remaining = list(db.scalars(select(Transaction).where(Transaction.import_batch_id == batch_id)))
+        if not remaining:
+            db.delete(batch)
+            deleted += 1
+            continue
+        batch.imported_rows = len(remaining)
+        batch.total_rows = max(batch.imported_rows + batch.duplicated_rows, batch.imported_rows)
+        batch.period_start = min(tx.transaction_date for tx in remaining)
+        batch.period_end = max(tx.transaction_date for tx in remaining)
+        batch.status = ImportStatus.completed if batch.duplicated_rows == 0 else ImportStatus.partially_completed
+        updated += 1
+    return deleted, updated
 
 
 async def _process_import(db: Session, account_id: int, file: UploadFile, importer, source_bank: str, file_type: str):

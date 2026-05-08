@@ -1,4 +1,6 @@
 from datetime import date
+from decimal import Decimal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -9,6 +11,7 @@ from app.models.account import Account
 from app.models.chart_account import ChartAccount
 from app.models.classification_rule import ClassificationRule
 from app.models.enums import ClassificationStatus, Direction, MatchType, TransactionSource, TransactionType
+from app.models.reserve_box import ReserveBox
 from app.models.transaction import Transaction
 from app.schemas.classification_rule_schema import ClassificationRuleRead
 from app.schemas.transaction_schema import (
@@ -17,6 +20,8 @@ from app.schemas.transaction_schema import (
     TransactionClassifyRequest,
     TransactionListItem,
     TransactionRead,
+    TransactionSplitItem,
+    TransactionSplitRequest,
     TransactionUpdate,
 )
 from app.services.balance_service import BalanceService
@@ -25,6 +30,7 @@ from app.utils.fingerprint import make_fingerprint
 from app.utils.text_normalizer import normalize_text
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
+MONEY_QUANTUM = Decimal("0.01")
 
 
 def _to_list_item(row) -> TransactionListItem:
@@ -40,6 +46,8 @@ def _to_list_item(row) -> TransactionListItem:
 def create_manual_transaction(payload: ManualTransactionCreate, db: Session = Depends(get_db)):
     if not db.get(Account, payload.account_id):
         raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    _ensure_reserve_box(db, payload.reserve_box_id, payload.account_id)
 
     description_clean = normalize_text(payload.description_original)
     amount = payload.amount
@@ -62,6 +70,7 @@ def create_manual_transaction(payload: ManualTransactionCreate, db: Session = De
         "fingerprint": fingerprint,
         "classification_status": ClassificationStatus.manual if payload.chart_account_id else ClassificationStatus.pending,
         "is_internal_transfer": payload.is_internal_transfer,
+        "reserve_box_id": payload.reserve_box_id,
         "notes": payload.notes,
     }
 
@@ -132,6 +141,8 @@ def update_transaction(transaction_id: int, payload: TransactionUpdate, db: Sess
         raise HTTPException(status_code=404, detail="Movimentação não encontrada")
 
     data = payload.model_dump(exclude_unset=True)
+    target_account_id = data.get("account_id", tx.account_id)
+    _ensure_reserve_box(db, data.get("reserve_box_id"), target_account_id)
     for field, value in data.items():
         setattr(tx, field, value)
 
@@ -163,6 +174,69 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     return None
 
 
+@router.post("/{transaction_id}/split", response_model=list[TransactionRead])
+def split_transaction(transaction_id: int, payload: TransactionSplitRequest, db: Session = Depends(get_db)):
+    tx = db.get(Transaction, transaction_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="Movimentacao nao encontrada")
+
+    original_amount = _money(tx.amount)
+    part_amounts = [_money(part.amount) for part in payload.parts]
+    if any(amount == 0 for amount in part_amounts):
+        raise HTTPException(status_code=400, detail="Partes da divisao nao podem ter valor zero")
+    if sum(part_amounts, Decimal("0.00")) != original_amount:
+        raise HTTPException(status_code=400, detail="A soma das partes precisa ser igual ao valor original")
+
+    _validate_split_references(db, tx.account_id, payload.parts)
+    original = {
+        "account_id": tx.account_id,
+        "transaction_date": tx.transaction_date,
+        "description_original": tx.description_original,
+        "amount": original_amount,
+        "transaction_type": tx.transaction_type,
+        "source": tx.source,
+        "external_id": tx.external_id,
+        "fingerprint": tx.fingerprint,
+        "import_batch_id": tx.import_batch_id,
+        "is_internal_transfer": tx.is_internal_transfer,
+        "notes": tx.notes,
+    }
+
+    first_values = _split_values(payload.parts[0], part_amounts[0], original)
+    for field, value in first_values.items():
+        setattr(tx, field, value)
+    tx.external_id = original["external_id"]
+    tx.fingerprint = original["fingerprint"]
+
+    split_transactions = [tx]
+    for index, part in enumerate(payload.parts[1:], start=1):
+        values = _split_values(part, part_amounts[index], original)
+        external_id = f"split:{transaction_id}:{index}:{uuid4().hex[:8]}"
+        values["external_id"] = external_id
+        values["fingerprint"] = make_fingerprint(
+            original["account_id"],
+            original["transaction_date"],
+            values["amount"],
+            values["description_clean"],
+            external_id,
+        )
+        new_tx = Transaction(
+            account_id=original["account_id"],
+            transaction_date=original["transaction_date"],
+            source=original["source"],
+            import_batch_id=original["import_batch_id"],
+            **values,
+        )
+        db.add(new_tx)
+        split_transactions.append(new_tx)
+
+    db.commit()
+    BalanceService(db).recalculate_balances()
+    for split_tx in split_transactions:
+        db.refresh(split_tx)
+    return split_transactions
+
+
 @router.put("/{transaction_id}/classify", response_model=TransactionRead)
 def classify_transaction(transaction_id: int, payload: TransactionClassifyRequest, db: Session = Depends(get_db)):
     tx = db.get(Transaction, transaction_id)
@@ -171,12 +245,15 @@ def classify_transaction(transaction_id: int, payload: TransactionClassifyReques
     if not db.get(ChartAccount, payload.chart_account_id):
         raise HTTPException(status_code=404, detail="Conta do plano não encontrada")
 
+    _ensure_reserve_box(db, payload.reserve_box_id, tx.account_id)
+
     tx.chart_account_id = payload.chart_account_id
     tx.transaction_type = payload.transaction_type
     tx.is_internal_transfer = payload.is_internal_transfer or payload.transaction_type in {
         TransactionType.transfer,
         TransactionType.reserve,
     }
+    tx.reserve_box_id = payload.reserve_box_id
     tx.notes = payload.notes
     tx.classification_status = ClassificationStatus.manual
     if payload.create_rule:
@@ -262,6 +339,7 @@ def _apply_classification_to_equal_pending(db: Session, tx: Transaction) -> int:
         match.chart_account_id = tx.chart_account_id
         match.transaction_type = tx.transaction_type
         match.is_internal_transfer = tx.is_internal_transfer
+        match.reserve_box_id = tx.reserve_box_id
         match.classification_status = ClassificationStatus.automatic
     return len(matches)
 
@@ -273,3 +351,57 @@ def _base_query():
         .join(ChartAccount, ChartAccount.id == Transaction.chart_account_id, isouter=True)
         .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
     )
+
+
+def _ensure_reserve_box(db: Session, reserve_box_id: int | None, account_id: int) -> None:
+    if reserve_box_id is None:
+        return
+    reserve_box = db.get(ReserveBox, reserve_box_id)
+    if not reserve_box or reserve_box.account_id != account_id:
+        raise HTTPException(status_code=404, detail="Reserva nao encontrada para esta conta")
+
+
+def _validate_split_references(db: Session, account_id: int, parts: list[TransactionSplitItem]) -> None:
+    for part in parts:
+        if part.chart_account_id is not None and not db.get(ChartAccount, part.chart_account_id):
+            raise HTTPException(status_code=404, detail="Conta do plano nao encontrada")
+        _ensure_reserve_box(db, part.reserve_box_id, account_id)
+
+
+def _money(value: Decimal) -> Decimal:
+    return Decimal(value).quantize(MONEY_QUANTUM)
+
+
+def _split_values(part: TransactionSplitItem, amount: Decimal, original: dict) -> dict:
+    description = part.description_original or original["description_original"]
+    description_clean = normalize_text(description)
+    transaction_type = part.transaction_type or _default_transaction_type(
+        original["transaction_type"],
+        original["amount"],
+        amount,
+    )
+    is_internal_transfer = (
+        bool(part.is_internal_transfer)
+        if part.is_internal_transfer is not None
+        else bool(original["is_internal_transfer"])
+    )
+    is_internal_transfer = is_internal_transfer or transaction_type in {TransactionType.transfer, TransactionType.reserve}
+    chart_account_id = part.chart_account_id
+    return {
+        "chart_account_id": chart_account_id,
+        "reserve_box_id": part.reserve_box_id,
+        "description_original": description,
+        "description_clean": description_clean,
+        "amount": amount,
+        "transaction_type": transaction_type,
+        "direction": part.direction or (Direction.in_ if amount >= 0 else Direction.out),
+        "classification_status": ClassificationStatus.manual if chart_account_id else ClassificationStatus.pending,
+        "is_internal_transfer": is_internal_transfer,
+        "notes": part.notes if part.notes is not None else original["notes"],
+    }
+
+
+def _default_transaction_type(original_type: TransactionType, original_amount: Decimal, amount: Decimal) -> TransactionType:
+    if (original_amount >= 0) == (amount >= 0):
+        return original_type
+    return TransactionType.income if amount >= 0 else TransactionType.expense

@@ -1,5 +1,5 @@
-import { Edit3, PlayCircle, Plus, Power } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Edit3, PlayCircle, Plus, Power, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -25,6 +25,11 @@ export function ClassificationRulesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState<ClassificationRule | null>(null);
   const [form, setForm] = useState<ClassificationRulePayload>(emptyForm);
+
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
   const rules = useQuery({ queryKey: ["classification-rules"], queryFn: classificationRulesService.list });
   const chartAccounts = useQuery({ queryKey: ["chart-accounts"], queryFn: () => chartAccountsService.list() });
 
@@ -43,6 +48,25 @@ export function ClassificationRulesPage() {
     );
   }, [selected, formOpen]);
 
+  const filteredRules = useMemo(() => {
+    const accounts = chartAccounts.data ?? [];
+    return (rules.data ?? []).filter((rule) => {
+      const chart = accounts.find((a) => a.id === rule.chart_account_id);
+      const categoryLabel = chart ? `${chart.code} ${chart.name}`.toLowerCase() : "";
+      const q = search.toLowerCase();
+      const matchesSearch =
+        !q ||
+        rule.keyword.toLowerCase().includes(q) ||
+        categoryLabel.includes(q) ||
+        rule.match_type.toLowerCase().includes(q);
+      const matchesType = !filterType || rule.transaction_type === filterType;
+      const matchesStatus =
+        !filterStatus ||
+        (filterStatus === "active" ? rule.active : !rule.active);
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [rules.data, chartAccounts.data, search, filterType, filterStatus]);
+
   const saveMutation = useMutation({
     mutationFn: () => (selected ? classificationRulesService.update(selected.id, form) : classificationRulesService.create(form)),
     onSuccess: () => {
@@ -56,6 +80,11 @@ export function ClassificationRulesPage() {
 
   const deactivateMutation = useMutation({
     mutationFn: classificationRulesService.deactivate,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["classification-rules"] })
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: classificationRulesService.remove,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["classification-rules"] })
   });
 
@@ -99,6 +128,42 @@ export function ClassificationRulesPage() {
         </div>
       )}
 
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar por palavra-chave ou categoria..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">Todos os tipos</option>
+          <option value="income">Receita</option>
+          <option value="expense">Despesa</option>
+          <option value="transfer">Transferência</option>
+          <option value="reserve">Reserva</option>
+          <option value="adjustment">Ajuste</option>
+          <option value="credit_card_payment">Pagamento cartão</option>
+        </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">Todos os status</option>
+          <option value="active">Ativas</option>
+          <option value="inactive">Inativas</option>
+        </select>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -114,7 +179,14 @@ export function ClassificationRulesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rules.data?.map((rule) => {
+              {filteredRules.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-400">
+                    Nenhuma regra encontrada.
+                  </td>
+                </tr>
+              )}
+              {filteredRules.map((rule) => {
                 const chart = chartAccounts.data?.find((item) => item.id === rule.chart_account_id);
                 return (
                   <tr key={rule.id} className="hover:bg-gray-50">
@@ -138,6 +210,16 @@ export function ClassificationRulesPage() {
                           }}
                         />
                         <Button title="Desativar" variant="ghost" icon={<Power size={16} />} onClick={() => deactivateMutation.mutate(rule.id)} />
+                        <Button
+                          title="Apagar"
+                          variant="ghost"
+                          icon={<Trash2 size={16} />}
+                          onClick={() => {
+                            if (confirm(`Apagar a regra "${rule.keyword}" permanentemente?`)) {
+                              removeMutation.mutate(rule.id);
+                            }
+                          }}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -188,10 +270,13 @@ function RuleForm({
         <option value="starts_with">Começa com</option>
         <option value="regex">Regex</option>
       </Select>
-      <Select label="Categoria" value={form.chart_account_id || ""} onChange={(event) => onChange({ ...form, chart_account_id: Number(event.target.value) })} required>
-        <option value="">Selecione</option>
-        {chartAccounts.map((item) => <option key={item.id} value={item.id}>{item.code} - {item.name}</option>)}
-      </Select>
+      <div className="md:col-span-2">
+        <CategoryCombobox
+          chartAccounts={chartAccounts}
+          value={form.chart_account_id}
+          onChange={(id) => onChange({ ...form, chart_account_id: id })}
+        />
+      </div>
       <Select label="Tipo" value={form.transaction_type} onChange={(event) => onChange({ ...form, transaction_type: event.target.value as TransactionType })}>
         <option value="income">Receita</option>
         <option value="expense">Despesa</option>
@@ -205,6 +290,75 @@ function RuleForm({
         <input type="checkbox" checked={form.active} onChange={(event) => onChange({ ...form, active: event.target.checked })} />
         Regra ativa
       </label>
+    </div>
+  );
+}
+
+function CategoryCombobox({
+  chartAccounts,
+  value,
+  onChange
+}: {
+  chartAccounts: Awaited<ReturnType<typeof chartAccountsService.list>>;
+  value: number;
+  onChange: (id: number) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selected = chartAccounts.find((a) => a.id === value);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    if (!q) return chartAccounts;
+    return chartAccounts.filter(
+      (a) => a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)
+    );
+  }, [chartAccounts, query]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="mb-1 block text-xs font-semibold text-gray-600">Categoria</label>
+      <input
+        type="text"
+        placeholder={selected ? `${selected.code} - ${selected.name}` : "Buscar categoria..."}
+        value={open ? query : selected ? `${selected.code} - ${selected.name}` : ""}
+        onFocus={() => { setOpen(true); setQuery(""); }}
+        onChange={(e) => setQuery(e.target.value)}
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+      />
+      {open && (
+        <ul className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg text-sm">
+          {filtered.length === 0 && (
+            <li className="px-3 py-2 text-gray-400">Nenhuma categoria encontrada.</li>
+          )}
+          {filtered.map((a) => (
+            <li
+              key={a.id}
+              onMouseDown={() => {
+                onChange(a.id);
+                setOpen(false);
+                setQuery("");
+              }}
+              className={`cursor-pointer px-3 py-2 hover:bg-blue-50 ${a.id === value ? "bg-blue-50 font-semibold text-blue-700" : "text-gray-700"}`}
+            >
+              {a.code} - {a.name}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

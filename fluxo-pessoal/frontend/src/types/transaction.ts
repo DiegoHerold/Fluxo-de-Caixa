@@ -8,6 +8,7 @@ export interface Transaction {
   account_id: number;
   chart_account_id: number | null;
   import_batch_id: number | null;
+  reserve_box_id: number | null;
   transaction_date: string;
   description_original: string;
   description_clean: string;

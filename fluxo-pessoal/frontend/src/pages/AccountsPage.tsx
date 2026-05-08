@@ -198,37 +198,48 @@ export function AccountsPage() {
           </Button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(reserveBoxes.data ?? []).map((box) => (
-            <div key={box.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-black text-gray-950">{box.name}</div>
-                  <div className="text-xs text-gray-500">{accountsById.get(box.account_id)?.name ?? `Conta ${box.account_id}`}</div>
+        <div className="mt-4 grid gap-6">
+          {(accounts.data ?? []).map((account) => {
+            const boxes = (reserveBoxes.data ?? []).filter((box) => box.account_id === account.id);
+            if (!boxes.length) return null;
+            return (
+              <div key={account.id}>
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase text-gray-500">{account.name}</span>
+                  {account.institution && <span className="text-xs text-gray-400">· {account.institution}</span>}
                 </div>
-                <Badge value={box.is_active ? "ativa" : "inativa"} />
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {boxes.map((box) => (
+                    <div key={box.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-black text-gray-950">{box.name}</div>
+                        <Badge value={box.is_active ? "ativa" : "inativa"} />
+                      </div>
+                      <div className="mt-4 text-2xl font-black text-emerald-700">{money(box.current_balance)}</div>
+                      {box.target_amount && <div className="mt-1 text-sm font-semibold text-gray-500">Meta: {money(box.target_amount)}</div>}
+                      {box.notes && <p className="mt-2 text-sm text-gray-600">{box.notes}</p>}
+                      <div className="mt-4 flex gap-2">
+                        <Button
+                          variant="secondary"
+                          icon={<Edit3 size={16} />}
+                          onClick={() => {
+                            setSelectedReserve(box);
+                            setReserveOpen(true);
+                          }}
+                        >
+                          Editar
+                        </Button>
+                        <Button variant="ghost" icon={<Power size={16} />} onClick={() => deactivateReserveMutation.mutate(box.id)}>
+                          Desativar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="mt-4 text-2xl font-black text-emerald-700">{money(box.current_balance)}</div>
-              {box.target_amount && <div className="mt-1 text-sm font-semibold text-gray-500">Meta: {money(box.target_amount)}</div>}
-              {box.notes && <p className="mt-2 text-sm text-gray-600">{box.notes}</p>}
-              <div className="mt-4 flex gap-2">
-                <Button
-                  variant="secondary"
-                  icon={<Edit3 size={16} />}
-                  onClick={() => {
-                    setSelectedReserve(box);
-                    setReserveOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
-                <Button variant="ghost" icon={<Power size={16} />} onClick={() => deactivateReserveMutation.mutate(box.id)}>
-                  Desativar
-                </Button>
-              </div>
-            </div>
-          ))}
-          {!reserveBoxes.data?.length && (
+            );
+          })}
+          {!(reserveBoxes.data ?? []).length && (
             <EmptyState title="Nenhuma caixinha manual" description="Crie caixinhas para registrar valores reais guardados fora do saldo disponível." />
           )}
         </div>

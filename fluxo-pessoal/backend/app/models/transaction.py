@@ -19,6 +19,7 @@ class Transaction(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
     chart_account_id: Mapped[int | None] = mapped_column(ForeignKey("chart_accounts.id"))
     import_batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batches.id"))
+    reserve_box_id: Mapped[int | None] = mapped_column(ForeignKey("reserve_boxes.id", ondelete="SET NULL"), index=True)
     transaction_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     description_original: Mapped[str] = mapped_column(Text, nullable=False)
     description_clean: Mapped[str] = mapped_column(Text, nullable=False, index=True)
@@ -39,3 +40,4 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
     chart_account = relationship("ChartAccount", back_populates="transactions")
     import_batch = relationship("ImportBatch", back_populates="transactions")
+    reserve_box = relationship("ReserveBox")

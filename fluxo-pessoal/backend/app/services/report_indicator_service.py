@@ -130,7 +130,7 @@ class ReportIndicatorService:
                     ("2", FormulaOperation.subtract, FormulaValueMode.outflow, "Fixas"),
                     ("3", FormulaOperation.subtract, FormulaValueMode.outflow, "Variáveis"),
                     ("4", FormulaOperation.subtract, FormulaValueMode.outflow, "Obrigações"),
-                    ("5", FormulaOperation.subtract, FormulaValueMode.outflow, "Reservas e objetivos"),
+                    ("8", FormulaOperation.subtract, FormulaValueMode.outflow, "Reservas e objetivos"),
                 ],
             },
             {
@@ -144,11 +144,8 @@ class ReportIndicatorService:
                     ("2", FormulaOperation.subtract, FormulaValueMode.outflow, "Fixas"),
                     ("4", FormulaOperation.subtract, FormulaValueMode.outflow, "Obrigações"),
                     ("3.1", FormulaOperation.subtract, FormulaValueMode.outflow, "Alimentação"),
-                    ("3.2", FormulaOperation.subtract, FormulaValueMode.outflow, "Mercado"),
-                    ("3.4", FormulaOperation.subtract, FormulaValueMode.outflow, "Transporte"),
-                    ("3.5", FormulaOperation.subtract, FormulaValueMode.outflow, "Combustível"),
-                    ("3.6", FormulaOperation.subtract, FormulaValueMode.outflow, "Saúde"),
-                    ("3.7", FormulaOperation.subtract, FormulaValueMode.outflow, "Farmácia"),
+                    ("3.2", FormulaOperation.subtract, FormulaValueMode.outflow, "Transporte"),
+                    ("3.3", FormulaOperation.subtract, FormulaValueMode.outflow, "Saúde"),
                 ],
             },
             {
@@ -161,11 +158,8 @@ class ReportIndicatorService:
                     ("2", FormulaOperation.add, FormulaValueMode.outflow, "Despesas fixas"),
                     ("4", FormulaOperation.add, FormulaValueMode.outflow, "Obrigações"),
                     ("3.1", FormulaOperation.add, FormulaValueMode.outflow, "Alimentação"),
-                    ("3.2", FormulaOperation.add, FormulaValueMode.outflow, "Mercado"),
-                    ("3.4", FormulaOperation.add, FormulaValueMode.outflow, "Transporte"),
-                    ("3.5", FormulaOperation.add, FormulaValueMode.outflow, "Combustível"),
-                    ("3.6", FormulaOperation.add, FormulaValueMode.outflow, "Saúde"),
-                    ("3.7", FormulaOperation.add, FormulaValueMode.outflow, "Farmácia"),
+                    ("3.2", FormulaOperation.add, FormulaValueMode.outflow, "Transporte"),
+                    ("3.3", FormulaOperation.add, FormulaValueMode.outflow, "Saúde"),
                 ],
             },
             {
@@ -175,10 +169,10 @@ class ReportIndicatorService:
                 "positive_is_good": False,
                 "display_order": 6,
                 "terms": [
-                    ("3.3", FormulaOperation.add, FormulaValueMode.outflow, "Restaurante/Lanche"),
-                    ("3.8", FormulaOperation.add, FormulaValueMode.outflow, "Roupas"),
-                    ("3.9", FormulaOperation.add, FormulaValueMode.outflow, "Lazer"),
-                    ("3.10", FormulaOperation.add, FormulaValueMode.outflow, "Compras pessoais"),
+                    ("3.1.2", FormulaOperation.add, FormulaValueMode.outflow, "Restaurante/Lanche"),
+                    ("3.4.1", FormulaOperation.add, FormulaValueMode.outflow, "Roupas"),
+                    ("3.5", FormulaOperation.add, FormulaValueMode.outflow, "Lazer"),
+                    ("3.4.3", FormulaOperation.add, FormulaValueMode.outflow, "Compras pessoais"),
                 ],
             },
             {
@@ -208,7 +202,7 @@ class ReportIndicatorService:
                 "positive_is_good": True,
                 "display_order": 9,
                 "terms": [
-                    ("5", FormulaOperation.add, FormulaValueMode.outflow, "Reservas e objetivos"),
+                    ("8", FormulaOperation.add, FormulaValueMode.outflow, "Reservas e objetivos"),
                 ],
             },
             {
@@ -218,7 +212,7 @@ class ReportIndicatorService:
                 "positive_is_good": False,
                 "display_order": 10,
                 "terms": [
-                    ("5", FormulaOperation.add, FormulaValueMode.inflow, "Retiradas de reservas"),
+                    ("8", FormulaOperation.add, FormulaValueMode.inflow, "Retiradas de reservas"),
                 ],
             },
             {
@@ -229,20 +223,18 @@ class ReportIndicatorService:
                 "display_order": 11,
                 "terms": [
                     ("1.1", FormulaOperation.add, FormulaValueMode.inflow, "Salário"),
-                    ("1.2", FormulaOperation.add, FormulaValueMode.inflow, "Adiantamento"),
+                    ("1.2", FormulaOperation.add, FormulaValueMode.inflow, "Extra/Bicos"),
                 ],
             },
             {
                 "name": "Receitas extras",
-                "description": "Entradas fora da renda principal: reembolso, Pix recebido, vendas e outros recebimentos.",
+                "description": "Entradas fora da renda principal: vendas, outros recebimentos.",
                 "result_label": "Extras",
                 "positive_is_good": True,
                 "display_order": 12,
                 "terms": [
-                    ("1.3", FormulaOperation.add, FormulaValueMode.inflow, "Reembolso"),
-                    ("1.4", FormulaOperation.add, FormulaValueMode.inflow, "Pix recebido"),
-                    ("1.5", FormulaOperation.add, FormulaValueMode.inflow, "Venda"),
-                    ("1.6", FormulaOperation.add, FormulaValueMode.inflow, "Outros recebimentos"),
+                    ("1.3", FormulaOperation.add, FormulaValueMode.inflow, "Vendas"),
+                    ("1.4", FormulaOperation.add, FormulaValueMode.inflow, "Outros recebimentos"),
                 ],
             },
             {
@@ -253,12 +245,12 @@ class ReportIndicatorService:
                 "display_order": 13,
                 "show_on_dashboard": False,
                 "terms": [
-                    ("2.1", FormulaOperation.add, FormulaValueMode.outflow, "Aluguel"),
-                    ("2.2", FormulaOperation.add, FormulaValueMode.outflow, "Água"),
-                    ("2.3", FormulaOperation.add, FormulaValueMode.outflow, "Luz"),
-                    ("2.4", FormulaOperation.add, FormulaValueMode.outflow, "Internet"),
-                    ("2.5", FormulaOperation.add, FormulaValueMode.outflow, "Telefone"),
-                    ("2.7", FormulaOperation.add, FormulaValueMode.outflow, "Assinaturas"),
+                    ("2.1", FormulaOperation.add, FormulaValueMode.outflow, "Moradia"),
+                    ("2.1.2", FormulaOperation.add, FormulaValueMode.outflow, "Água"),
+                    ("2.1.3", FormulaOperation.add, FormulaValueMode.outflow, "Luz"),
+                    ("2.1.4", FormulaOperation.add, FormulaValueMode.outflow, "Internet"),
+                    ("2.2.1", FormulaOperation.add, FormulaValueMode.outflow, "Telefone"),
+                    ("2.2.3", FormulaOperation.add, FormulaValueMode.outflow, "Assinaturas"),
                 ],
             },
             {
@@ -269,8 +261,7 @@ class ReportIndicatorService:
                 "display_order": 14,
                 "show_on_dashboard": False,
                 "terms": [
-                    ("3.6", FormulaOperation.add, FormulaValueMode.outflow, "Saúde"),
-                    ("3.7", FormulaOperation.add, FormulaValueMode.outflow, "Farmácia"),
+                    ("3.3", FormulaOperation.add, FormulaValueMode.outflow, "Saúde"),
                 ],
             },
             {
@@ -281,8 +272,7 @@ class ReportIndicatorService:
                 "display_order": 15,
                 "show_on_dashboard": False,
                 "terms": [
-                    ("3.4", FormulaOperation.add, FormulaValueMode.outflow, "Transporte"),
-                    ("3.5", FormulaOperation.add, FormulaValueMode.outflow, "Combustível"),
+                    ("3.2", FormulaOperation.add, FormulaValueMode.outflow, "Transporte"),
                 ],
             },
             {
@@ -293,10 +283,10 @@ class ReportIndicatorService:
                 "display_order": 16,
                 "show_on_dashboard": False,
                 "terms": [
-                    ("3.3", FormulaOperation.add, FormulaValueMode.outflow, "Restaurante/Lanche"),
-                    ("3.8", FormulaOperation.add, FormulaValueMode.outflow, "Roupas"),
-                    ("3.9", FormulaOperation.add, FormulaValueMode.outflow, "Lazer"),
-                    ("3.10", FormulaOperation.add, FormulaValueMode.outflow, "Compras pessoais"),
+                    ("3.1.2", FormulaOperation.add, FormulaValueMode.outflow, "Restaurante/Lanche"),
+                    ("3.4.1", FormulaOperation.add, FormulaValueMode.outflow, "Roupas"),
+                    ("3.5", FormulaOperation.add, FormulaValueMode.outflow, "Lazer"),
+                    ("3.4.3", FormulaOperation.add, FormulaValueMode.outflow, "Compras pessoais"),
                 ],
             },
             {
@@ -307,7 +297,7 @@ class ReportIndicatorService:
                 "display_order": 17,
                 "show_on_dashboard": False,
                 "terms": [
-                    ("7", FormulaOperation.add, FormulaValueMode.absolute, "Ajustes"),
+                    ("6", FormulaOperation.add, FormulaValueMode.absolute, "Ajustes"),
                 ],
             },
             {
@@ -319,7 +309,7 @@ class ReportIndicatorService:
                 "display_order": 18,
                 "show_on_dashboard": False,
                 "terms": [
-                    ("6", FormulaOperation.add, FormulaValueMode.absolute, "Transferências internas"),
+                    ("5", FormulaOperation.add, FormulaValueMode.absolute, "Transferências internas"),
                 ],
             },
             {
@@ -366,10 +356,10 @@ class ReportIndicatorService:
                     ("2", FormulaOperation.add, FormulaValueMode.outflow, "Fixas", "fixas"),
                     ("4", FormulaOperation.add, FormulaValueMode.outflow, "Obrigações", "obrigacoes"),
                     ("3", FormulaOperation.add, FormulaValueMode.outflow, "Variáveis", "variaveis"),
-                    ("3.3", FormulaOperation.add, FormulaValueMode.outflow, "Restaurante/Lanche", "lanche"),
-                    ("3.8", FormulaOperation.add, FormulaValueMode.outflow, "Roupas", "roupas"),
-                    ("3.9", FormulaOperation.add, FormulaValueMode.outflow, "Lazer", "lazer"),
-                    ("3.10", FormulaOperation.add, FormulaValueMode.outflow, "Compras pessoais", "compras"),
+                    ("3.1.2", FormulaOperation.add, FormulaValueMode.outflow, "Restaurante/Lanche", "lanche"),
+                    ("3.4.1", FormulaOperation.add, FormulaValueMode.outflow, "Roupas", "roupas"),
+                    ("3.5", FormulaOperation.add, FormulaValueMode.outflow, "Lazer", "lazer"),
+                    ("3.4.3", FormulaOperation.add, FormulaValueMode.outflow, "Compras pessoais", "compras"),
                 ],
                 "formula_expression": "receita - fixas - obrigacoes - (variaveis * 1.15) - ((lanche + roupas + lazer + compras) * 0.20)",
             },
@@ -382,13 +372,13 @@ class ReportIndicatorService:
                 "show_on_dashboard": False,
                 "terms": [
                     ("1.1", FormulaOperation.add, FormulaValueMode.inflow, "Salário provável", "salario", 1, 1),
-                    ("1.3", FormulaOperation.add, FormulaValueMode.inflow, "Reembolsos prováveis", "reembolsos", 1, 0.5),
-                    ("1.4", FormulaOperation.add, FormulaValueMode.inflow, "Pix prováveis", "pix", 1, 0.4),
+                    ("1.3", FormulaOperation.add, FormulaValueMode.inflow, "Vendas prováveis", "vendas", 1, 0.5),
+                    ("1.4", FormulaOperation.add, FormulaValueMode.inflow, "Outros prováveis", "outros", 1, 0.4),
                     ("2", FormulaOperation.add, FormulaValueMode.outflow, "Fixas", "fixas", 1, 1),
                     ("3", FormulaOperation.add, FormulaValueMode.outflow, "Variáveis", "variaveis", 1, 0.9),
                     ("4", FormulaOperation.add, FormulaValueMode.outflow, "Obrigações", "obrigacoes", 1, 1),
                 ],
-                "formula_expression": "salario + reembolsos + pix - fixas - variaveis - obrigacoes",
+                "formula_expression": "salario + vendas + outros - fixas - variaveis - obrigacoes",
             },
             {
                 "name": "Pressão de ficar negativo",
@@ -474,16 +464,16 @@ class ReportIndicatorService:
                 "show_on_dashboard": False,
                 "terms": [
                     ("1.1", FormulaOperation.add, FormulaValueMode.inflow, "Salario", "salario"),
-                    ("1.2", FormulaOperation.add, FormulaValueMode.inflow, "Adiantamento", "adiantamento"),
+                    ("1.2", FormulaOperation.add, FormulaValueMode.inflow, "Extra/Bicos", "extra"),
                     ("2", FormulaOperation.add, FormulaValueMode.outflow, "Fixas", "fixas"),
                     ("3", FormulaOperation.add, FormulaValueMode.outflow, "Variaveis", "variaveis"),
                     ("4", FormulaOperation.add, FormulaValueMode.outflow, "Obrigacoes", "obrigacoes"),
                 ],
-                "formula_expression": "salario + adiantamento - fixas - variaveis - obrigacoes",
+                "formula_expression": "salario + extra - fixas - variaveis - obrigacoes",
             },
             {
                 "name": "Dependencia de renda extra",
-                "description": "Percentual da receita vindo de reembolsos, Pix, vendas e outros recebimentos.",
+                "description": "Percentual da receita vindo de vendas e outros recebimentos.",
                 "result_label": "% extra",
                 "result_format": "percent",
                 "positive_is_good": False,
@@ -491,12 +481,10 @@ class ReportIndicatorService:
                 "show_on_dashboard": False,
                 "terms": [
                     ("1", FormulaOperation.add, FormulaValueMode.inflow, "Receita", "receita"),
-                    ("1.3", FormulaOperation.add, FormulaValueMode.inflow, "Reembolso", "reembolso"),
-                    ("1.4", FormulaOperation.add, FormulaValueMode.inflow, "Pix recebido", "pix"),
-                    ("1.5", FormulaOperation.add, FormulaValueMode.inflow, "Venda", "venda"),
-                    ("1.6", FormulaOperation.add, FormulaValueMode.inflow, "Outros", "outros"),
+                    ("1.3", FormulaOperation.add, FormulaValueMode.inflow, "Vendas", "vendas"),
+                    ("1.4", FormulaOperation.add, FormulaValueMode.inflow, "Outros recebimentos", "outros"),
                 ],
-                "formula_expression": "pct(reembolso + pix + venda + outros, receita)",
+                "formula_expression": "pct(vendas + outros, receita)",
             },
             {
                 "name": "Peso do cartao na renda",
@@ -522,7 +510,7 @@ class ReportIndicatorService:
                 "show_on_dashboard": False,
                 "terms": [
                     ("1", FormulaOperation.add, FormulaValueMode.inflow, "Receita", "receita"),
-                    ("5", FormulaOperation.add, FormulaValueMode.outflow, "Reservas", "reservas"),
+                    ("8", FormulaOperation.add, FormulaValueMode.outflow, "Reservas", "reservas"),
                 ],
                 "formula_expression": "pct(reservas, receita)",
             },

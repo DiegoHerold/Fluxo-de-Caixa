@@ -1,4 +1,4 @@
-import { Edit3, Trash2 } from "lucide-react";
+import { Edit3, Split, Trash2 } from "lucide-react";
 import { formatDateBR, money } from "../../services/api";
 import type { Transaction } from "../../types/transaction";
 import { Badge } from "../ui/Badge";
@@ -7,13 +7,15 @@ import { Button } from "../ui/Button";
 export function TransactionsTable({
   transactions,
   onEdit,
+  onSplit,
   onDelete
 }: {
   transactions: Transaction[];
   onEdit?: (transaction: Transaction) => void;
+  onSplit?: (transaction: Transaction) => void;
   onDelete?: (id: number) => void;
 }) {
-  const hasActions = Boolean(onEdit || onDelete);
+  const hasActions = Boolean(onEdit || onSplit || onDelete);
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -52,6 +54,7 @@ export function TransactionsTable({
                   <td className="px-3 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       {onEdit && <Button title="Editar" variant="secondary" icon={<Edit3 size={16} />} onClick={() => onEdit(tx)} />}
+                      {onSplit && <Button title="Dividir" variant="secondary" icon={<Split size={16} />} onClick={() => onSplit(tx)} />}
                       {onDelete && <Button title="Excluir" variant="ghost" icon={<Trash2 size={16} />} onClick={() => onDelete(tx.id)} />}
                     </div>
                   </td>

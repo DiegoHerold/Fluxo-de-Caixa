@@ -13,6 +13,7 @@ export type TransactionFilters = {
 export type ManualTransactionPayload = {
   account_id: number;
   chart_account_id?: number | null;
+  reserve_box_id?: number | null;
   transaction_date: string;
   description_original: string;
   amount: string;
@@ -20,6 +21,17 @@ export type ManualTransactionPayload = {
   direction?: "in" | "out";
   notes?: string | null;
   is_internal_transfer: boolean;
+};
+
+export type TransactionSplitPartPayload = {
+  description_original?: string | null;
+  amount: string;
+  chart_account_id?: number | null;
+  reserve_box_id?: number | null;
+  transaction_type?: TransactionType | null;
+  direction?: "in" | "out" | null;
+  notes?: string | null;
+  is_internal_transfer?: boolean | null;
 };
 
 export const transactionsService = {
@@ -42,12 +54,17 @@ export const transactionsService = {
   async remove(id: number) {
     await api.delete(`/transactions/${id}`);
   },
+  async split(id: number, parts: TransactionSplitPartPayload[]) {
+    const { data } = await api.post<Transaction[]>(`/transactions/${id}/split`, { parts });
+    return data;
+  },
   async classify(
     id: number,
     payload: {
       chart_account_id: number;
       transaction_type: TransactionType;
       is_internal_transfer: boolean;
+      reserve_box_id?: number | null;
       notes?: string | null;
       create_rule?: boolean;
       rule_keyword?: string | null;

@@ -60,7 +60,7 @@ def update_rule(rule_id: int, payload: ClassificationRuleUpdate, db: Session = D
 
 
 @router.delete("/{rule_id}", response_model=ClassificationRuleRead)
-def delete_rule(rule_id: int, db: Session = Depends(get_db)):
+def deactivate_rule(rule_id: int, db: Session = Depends(get_db)):
     rule = db.get(ClassificationRule, rule_id)
     if not rule:
         raise HTTPException(status_code=404, detail="Regra não encontrada")
@@ -68,6 +68,15 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(rule)
     return rule
+
+
+@router.delete("/{rule_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+def delete_rule_permanent(rule_id: int, db: Session = Depends(get_db)):
+    rule = db.get(ClassificationRule, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Regra não encontrada")
+    db.delete(rule)
+    db.commit()
 
 
 @router.post("/apply-to-pending", response_model=ApplyRulesSummary)
