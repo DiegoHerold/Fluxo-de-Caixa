@@ -101,6 +101,7 @@ def list_transactions(
     status_filter: ClassificationStatus | None = Query(default=None, alias="status"),
     source: TransactionSource | None = None,
     transaction_type: TransactionType | None = None,
+    uncategorized: bool = False,
     search: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -111,8 +112,20 @@ def list_transactions(
     stmt = _base_query()
     if account_id:
         stmt = stmt.where(Transaction.account_id == account_id)
-    if chart_account_id:
-        stmt = stmt.where(Transaction.chart_account_id == chart_account_id)
+    if uncategorized:
+        stmt = stmt.where(Transaction.chart_account_id.is_(None))
+    elif chart_account_id:
+        chart_account = db.get(ChartAccount, chart_account_id)
+        if not chart_account:
+            stmt = stmt.where(Transaction.chart_account_id == chart_account_id)
+        else:
+            descendant_ids = select(ChartAccount.id).where(
+                or_(
+                    ChartAccount.id == chart_account.id,
+                    ChartAccount.code.like(f"{chart_account.code}.%"),
+                )
+            )
+            stmt = stmt.where(Transaction.chart_account_id.in_(descendant_ids))
     if status_filter:
         stmt = stmt.where(Transaction.classification_status == status_filter)
     if source:

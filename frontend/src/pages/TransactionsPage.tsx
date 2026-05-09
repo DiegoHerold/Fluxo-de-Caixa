@@ -1,5 +1,5 @@
-import { Plus, RotateCcw, Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TransactionsTable } from "../components/tables/TransactionsTable";
 import { Button } from "../components/ui/Button";
@@ -10,7 +10,7 @@ import { currentMonth, money, todayISODate } from "../services/api";
 import { accountsService } from "../services/accountsService";
 import { chartAccountsService } from "../services/chartAccountsService";
 import { transactionsService, type ManualTransactionPayload, type TransactionFilters, type TransactionSplitPartPayload } from "../services/transactionsService";
-import type { Transaction, TransactionType } from "../types/transaction";
+import type { ClassificationStatus, Transaction, TransactionSource, TransactionType } from "../types/transaction";
 
 const emptyManual: ManualTransactionPayload = {
   account_id: 0,
@@ -53,6 +53,10 @@ export function TransactionsPage() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: accountsService.list });
   const chartAccounts = useQuery({ queryKey: ["chart-accounts"], queryFn: () => chartAccountsService.list() });
   const transactions = useQuery({ queryKey: ["transactions", filters], queryFn: () => transactionsService.list(filters) });
+  const activeFilters = useMemo(
+    () => buildActiveFilterLabels(filters, accounts.data ?? [], chartAccounts.data ?? []),
+    [filters, accounts.data, chartAccounts.data]
+  );
   const splitDifferenceCents = splitTarget ? splitPartsTotalCents(splitParts) - toCents(splitTarget.amount) : 0;
   const canSaveSplit =
     Boolean(splitTarget) &&
@@ -69,6 +73,14 @@ export function TransactionsPage() {
     queryClient.invalidateQueries({ queryKey: ["reserves"] });
     queryClient.invalidateQueries({ queryKey: ["loan-people"] });
     queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
+  }
+
+  function setFilter<K extends keyof TransactionFilters>(key: K, value: TransactionFilters[K] | undefined) {
+    setFilters((current) => ({ ...current, [key]: value || undefined }));
+  }
+
+  function removeFilter(key: keyof TransactionFilters) {
+    setFilters((current) => ({ ...current, [key]: undefined }));
   }
 
   useEffect(() => {
@@ -144,7 +156,7 @@ export function TransactionsPage() {
             </Button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.5fr_0.9fr_0.9fr_1fr_1fr]">
             <label className="grid gap-1 text-sm font-medium text-gray-700 md:col-span-2 xl:col-span-1">
               <span>Pesquisar</span>
               <span className="relative">
@@ -152,20 +164,33 @@ export function TransactionsPage() {
                 <input
                   className="min-h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 pl-9 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   value={filters.search ?? ""}
-                  onChange={(event) => setFilters({ ...filters, search: event.target.value || undefined })}
+                  onChange={(event) => setFilter("search", event.target.value || undefined)}
                   placeholder="Descricao, observacao..."
                 />
+                {filters.search && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                    onClick={() => removeFilter("search")}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </span>
             </label>
-            <Select label="Conta" value={filters.account_id ?? ""} onChange={(event) => setFilters({ ...filters, account_id: event.target.value ? Number(event.target.value) : undefined })}>
+            <Input label="Inicio" type="date" value={filters.start_date ?? ""} onChange={(event) => setFilter("start_date", event.target.value || undefined)} />
+            <Input label="Fim" type="date" value={filters.end_date ?? ""} onChange={(event) => setFilter("end_date", event.target.value || undefined)} />
+            <Select label="Conta" value={filters.account_id ?? ""} onChange={(event) => setFilter("account_id", event.target.value ? Number(event.target.value) : undefined)}>
               <option value="">Todas</option>
               {accounts.data?.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
             </Select>
-            <Select label="Categoria" value={filters.chart_account_id ?? ""} onChange={(event) => setFilters({ ...filters, chart_account_id: event.target.value ? Number(event.target.value) : undefined })}>
-              <option value="">Todas</option>
-              {chartAccounts.data?.map((item) => <option key={item.id} value={item.id}>{item.code} - {item.name}</option>)}
-            </Select>
-            <Select label="Tipo" value={filters.transaction_type ?? ""} onChange={(event) => setFilters({ ...filters, transaction_type: (event.target.value || undefined) as TransactionType | undefined })}>
+            <ChartAccountFilterCombobox
+              chartAccounts={chartAccounts.data ?? []}
+              value={filters.chart_account_id}
+              disabled={Boolean(filters.uncategorized)}
+              onChange={(chartAccountId) => setFilters((current) => ({ ...current, chart_account_id: chartAccountId, uncategorized: undefined }))}
+            />
+            <Select label="Tipo" value={filters.transaction_type ?? ""} onChange={(event) => setFilter("transaction_type", (event.target.value || undefined) as TransactionType | undefined)}>
               <option value="">Todos</option>
               <option value="income">Receita</option>
               <option value="expense">Despesa</option>
@@ -174,15 +199,20 @@ export function TransactionsPage() {
               <option value="adjustment">Ajuste</option>
               <option value="credit_card_payment">Pagamento cartão</option>
             </Select>
-            <Select label="Status" value={filters.status ?? ""} onChange={(event) => setFilters({ ...filters, status: (event.target.value || undefined) as TransactionFilters["status"] })}>
+            <Select label="Status" value={filters.status ?? ""} onChange={(event) => setFilter("status", (event.target.value || undefined) as ClassificationStatus | undefined)}>
               <option value="">Todos</option>
               <option value="pending">Pendente</option>
               <option value="automatic">Automático</option>
               <option value="manual">Manual</option>
               <option value="reviewed">Revisado</option>
             </Select>
-            <Input label="Início" type="date" value={filters.start_date ?? ""} onChange={(event) => setFilters({ ...filters, start_date: event.target.value || undefined })} />
-            <Input label="Fim" type="date" value={filters.end_date ?? ""} onChange={(event) => setFilters({ ...filters, end_date: event.target.value || undefined })} />
+            <Select label="Origem" value={filters.source ?? ""} onChange={(event) => setFilter("source", (event.target.value || undefined) as TransactionSource | undefined)}>
+              <option value="">Todas</option>
+              <option value="manual">Manual</option>
+              <option value="nubank_csv">Nubank CSV</option>
+              <option value="nubank_ofx">Nubank OFX</option>
+              <option value="mercado_pago_xlsx">Mercado Pago</option>
+            </Select>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -195,10 +225,36 @@ export function TransactionsPage() {
             <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, status: "pending" })}>
               Pendentes
             </Button>
+            <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, transaction_type: "income" })}>
+              Entradas
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, transaction_type: "expense" })}>
+              Saidas
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setFilters({ ...filters, chart_account_id: undefined, uncategorized: true })}>
+              Sem categoria
+            </Button>
             <Button variant="ghost" icon={<RotateCcw size={16} />} onClick={() => setFilters({})}>
               Limpar
             </Button>
           </div>
+
+          {activeFilters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold uppercase text-gray-500">{activeFilters.length} filtro(s)</span>
+              {activeFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-900"
+                  onClick={() => removeFilter(filter.key)}
+                >
+                  {filter.label}
+                  <X size={13} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </PageToolbar>
 
@@ -355,6 +411,87 @@ function TransactionForm({
           onChange={(event) => onChange({ ...value, notes: event.target.value })}
         />
       </label>
+    </div>
+  );
+}
+
+function ChartAccountFilterCombobox({
+  chartAccounts,
+  value,
+  disabled,
+  onChange
+}: {
+  chartAccounts: Awaited<ReturnType<typeof chartAccountsService.list>>;
+  value?: number;
+  disabled?: boolean;
+  onChange: (value: number | undefined) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = chartAccounts.find((item) => item.id === value);
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    const active = chartAccounts.filter((item) => item.is_active);
+    if (!q) return active;
+    return active.filter((item) => item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q));
+  }, [chartAccounts, query]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="mb-1 block text-xs font-semibold text-gray-600">Categoria</label>
+      <input
+        type="text"
+        disabled={disabled}
+        placeholder={disabled ? "Sem categoria" : selected ? `${selected.code} - ${selected.name}` : "Buscar por numero ou nome..."}
+        value={open ? query : disabled ? "Sem categoria" : selected ? `${selected.code} - ${selected.name}` : ""}
+        onFocus={() => {
+          if (disabled) return;
+          setOpen(true);
+          setQuery("");
+        }}
+        onChange={(event) => setQuery(event.target.value)}
+        className="min-h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-gray-100 disabled:text-gray-500"
+      />
+      {open && !disabled && (
+        <ul className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-gray-200 bg-white text-sm shadow-lg">
+          <li
+            className="cursor-pointer px-3 py-2 font-semibold text-gray-700 hover:bg-emerald-50"
+            onMouseDown={() => {
+              onChange(undefined);
+              setOpen(false);
+              setQuery("");
+            }}
+          >
+            Todas as categorias
+          </li>
+          {filtered.map((item) => (
+            <li
+              key={item.id}
+              className={`cursor-pointer px-3 py-2 hover:bg-emerald-50 ${item.id === value ? "bg-emerald-50 font-bold text-emerald-800" : "text-gray-700"}`}
+              onMouseDown={() => {
+                onChange(item.id);
+                setOpen(false);
+                setQuery("");
+              }}
+            >
+              {item.code} - {item.name}
+            </li>
+          ))}
+          {filtered.length === 0 && <li className="px-3 py-2 text-gray-400">Nenhuma categoria encontrada.</li>}
+        </ul>
+      )}
     </div>
   );
 }
@@ -537,4 +674,60 @@ function lastDaysFilter(days: number): Pick<TransactionFilters, "start_date" | "
 
 function toISODate(value: Date): string {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function buildActiveFilterLabels(
+  filters: TransactionFilters,
+  accounts: Awaited<ReturnType<typeof accountsService.list>>,
+  chartAccounts: Awaited<ReturnType<typeof chartAccountsService.list>>
+): Array<{ key: keyof TransactionFilters; label: string }> {
+  const items: Array<{ key: keyof TransactionFilters; label: string }> = [];
+  if (filters.search) items.push({ key: "search", label: `Busca: ${filters.search}` });
+  if (filters.start_date) items.push({ key: "start_date", label: `Inicio: ${filters.start_date}` });
+  if (filters.end_date) items.push({ key: "end_date", label: `Fim: ${filters.end_date}` });
+  if (filters.account_id) {
+    const account = accounts.find((item) => item.id === filters.account_id);
+    items.push({ key: "account_id", label: `Conta: ${account?.name ?? filters.account_id}` });
+  }
+  if (filters.uncategorized) items.push({ key: "uncategorized", label: "Sem categoria" });
+  if (filters.chart_account_id) {
+    const account = chartAccounts.find((item) => item.id === filters.chart_account_id);
+    items.push({ key: "chart_account_id", label: `Categoria: ${account ? `${account.code} - ${account.name}` : filters.chart_account_id}` });
+  }
+  if (filters.transaction_type) items.push({ key: "transaction_type", label: `Tipo: ${transactionTypeLabel(filters.transaction_type)}` });
+  if (filters.status) items.push({ key: "status", label: `Status: ${statusLabel(filters.status)}` });
+  if (filters.source) items.push({ key: "source", label: `Origem: ${sourceLabel(filters.source)}` });
+  return items;
+}
+
+function transactionTypeLabel(value: TransactionType): string {
+  const labels: Record<TransactionType, string> = {
+    income: "Receita",
+    expense: "Despesa",
+    transfer: "Transferencia",
+    reserve: "Reserva",
+    adjustment: "Ajuste",
+    credit_card_payment: "Pagamento cartao"
+  };
+  return labels[value];
+}
+
+function statusLabel(value: ClassificationStatus): string {
+  const labels: Record<ClassificationStatus, string> = {
+    pending: "Pendente",
+    automatic: "Automatico",
+    manual: "Manual",
+    reviewed: "Revisado"
+  };
+  return labels[value];
+}
+
+function sourceLabel(value: TransactionSource): string {
+  const labels: Record<TransactionSource, string> = {
+    manual: "Manual",
+    nubank_csv: "Nubank CSV",
+    nubank_ofx: "Nubank OFX",
+    mercado_pago_xlsx: "Mercado Pago"
+  };
+  return labels[value];
 }

@@ -1,11 +1,13 @@
 import { api } from "./api";
-import type { ClassificationStatus, Transaction, TransactionType } from "../types/transaction";
+import type { ClassificationStatus, Transaction, TransactionSource, TransactionType } from "../types/transaction";
 
 export type TransactionFilters = {
   account_id?: number;
   chart_account_id?: number;
   status?: ClassificationStatus;
+  source?: TransactionSource;
   transaction_type?: TransactionType;
+  uncategorized?: boolean;
   search?: string;
   start_date?: string;
   end_date?: string;
