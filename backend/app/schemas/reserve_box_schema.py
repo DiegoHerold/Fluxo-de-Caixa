@@ -32,6 +32,7 @@ class ReserveBoxUpdate(BaseModel):
 
 class ReserveBoxRead(ReserveBoxBase):
     id: int
+    calculated_balance: Decimal | None = None
     chart_account_code: str | None = None
     chart_account_name: str | None = None
     withdrawal_chart_account_code: str | None = None

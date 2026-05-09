@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -7,6 +9,7 @@ from app.models.account import Account
 from app.models.chart_account import ChartAccount
 from app.models.enums import AccountNature
 from app.models.reserve_box import ReserveBox
+from app.models.transaction import Transaction
 from app.schemas.reserve_box_schema import ReserveBoxCreate, ReserveBoxRead, ReserveBoxUpdate
 
 router = APIRouter(prefix="/reserve-boxes", tags=["reserve boxes"])
@@ -26,7 +29,7 @@ def create_reserve_box(payload: ReserveBoxCreate, db: Session = Depends(get_db))
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _to_read(item)
+    return _to_read(item, db)
 
 
 @router.get("", response_model=list[ReserveBoxRead])
@@ -36,7 +39,7 @@ def list_reserve_boxes(account_id: int | None = None, include_inactive: bool = F
         stmt = stmt.where(ReserveBox.account_id == account_id)
     if not include_inactive:
         stmt = stmt.where(ReserveBox.is_active.is_(True))
-    return [_to_read(item) for item in db.scalars(stmt)]
+    return [_to_read(item, db) for item in db.scalars(stmt)]
 
 
 @router.put("/{reserve_box_id}", response_model=ReserveBoxRead)
@@ -55,7 +58,7 @@ def update_reserve_box(reserve_box_id: int, payload: ReserveBoxUpdate, db: Sessi
         setattr(item, field, value)
     db.commit()
     db.refresh(item)
-    return _to_read(item)
+    return _to_read(item, db)
 
 
 @router.delete("/{reserve_box_id}", response_model=ReserveBoxRead)
@@ -63,10 +66,19 @@ def delete_reserve_box(reserve_box_id: int, db: Session = Depends(get_db)):
     item = db.get(ReserveBox, reserve_box_id)
     if not item:
         raise HTTPException(status_code=404, detail="Caixinha não encontrada")
-    item.is_active = False
+    blockers = _reserve_box_delete_blockers(db, item)
+    if blockers:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Nao foi possivel apagar a caixinha porque existem vinculos.",
+                "blockers": blockers,
+            },
+        )
+    deleted = _to_read(item, db)
+    db.delete(item)
     db.commit()
-    db.refresh(item)
-    return _to_read(item)
+    return deleted
 
 
 def _ensure_reserve_chart_account(db: Session, chart_account_id: int | None) -> None:
@@ -114,8 +126,45 @@ def _next_child_code(db: Session, parent_code: str) -> str:
     return f"{parent_code}.{(max(numbers) if numbers else 0) + 1}"
 
 
-def _to_read(item: ReserveBox) -> ReserveBoxRead:
+def _reserve_box_delete_blockers(db: Session, item: ReserveBox) -> list[dict]:
+    transaction_count = db.scalar(select(func.count()).select_from(Transaction).where(Transaction.reserve_box_id == item.id)) or 0
+    if not transaction_count:
+        return []
+    sample = list(
+        db.execute(
+            select(Transaction.id, Transaction.transaction_date, Transaction.description_original, Transaction.amount)
+            .where(Transaction.reserve_box_id == item.id)
+            .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
+            .limit(8)
+        )
+    )
+    return [
+        {
+            "type": "movimentacoes",
+            "count": transaction_count,
+            "items": [
+                {
+                    "id": tx_id,
+                    "date": tx_date.isoformat(),
+                    "description": description,
+                    "amount": str(amount),
+                }
+                for tx_id, tx_date, description, amount in sample
+            ],
+        }
+    ]
+
+
+def _effective_balance(db: Session, item: ReserveBox) -> Decimal:
+    transaction_delta = db.scalar(
+        select(func.coalesce(func.sum(-Transaction.amount), 0)).where(Transaction.reserve_box_id == item.id)
+    ) or Decimal("0.00")
+    return Decimal(item.current_balance) + Decimal(transaction_delta)
+
+
+def _to_read(item: ReserveBox, db: Session) -> ReserveBoxRead:
     data = ReserveBoxRead.model_validate(item)
+    data.calculated_balance = _effective_balance(db, item)
     data.chart_account_code = item.chart_account.code if item.chart_account else None
     data.chart_account_name = item.chart_account.name if item.chart_account else None
     data.withdrawal_chart_account_code = item.withdrawal_chart_account.code if item.withdrawal_chart_account else None

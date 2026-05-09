@@ -30,6 +30,33 @@ class LoanService:
             stmt = stmt.where(LoanPerson.is_active.is_(True))
         return [self.build_person_summary(person) for person in self.db.scalars(stmt)]
 
+    def create_person_with_default_accounts(self, payload) -> LoanPerson:
+        person = LoanPerson(**payload.model_dump())
+        self.db.add(person)
+        self.db.flush()
+
+        defaults = [
+            ("7.1", "Dinheiro emprestado", LoanMovementEffect.increase),
+            ("7.2", "Dinheiro emprestado recebido", LoanMovementEffect.decrease),
+            ("7.3", "Conta dividida a receber", LoanMovementEffect.increase),
+            ("7.4", "Conta dividida recebida", LoanMovementEffect.decrease),
+        ]
+        for parent_code, label, effect in defaults:
+            account = self._find_or_create_child_chart_account(parent_code, f"{label} | {person.name}")
+            self.db.add(
+                LoanAccountLink(
+                    person_id=person.id,
+                    chart_account_id=account.id,
+                    effect=effect,
+                    notes="Criado automaticamente com a pessoa",
+                    is_active=True,
+                )
+            )
+
+        self.db.commit()
+        self.db.refresh(person)
+        return person
+
     def build_person_summary(self, person: LoanPerson) -> LoanPersonSummary:
         increase_total, decrease_total, linked_count = self.calculate_totals(person.id)
         return LoanPersonSummary(
@@ -229,3 +256,36 @@ class LoanService:
         item.chart_account_code = writeoff.chart_account.code if writeoff.chart_account else None
         item.chart_account_name = writeoff.chart_account.name if writeoff.chart_account else None
         return item
+
+    def _find_or_create_child_chart_account(self, parent_code: str, name: str) -> ChartAccount:
+        parent = self.db.scalar(select(ChartAccount).where(ChartAccount.code == parent_code))
+        if not parent:
+            raise HTTPException(status_code=400, detail=f"Classificacao base {parent_code} nao encontrada")
+        existing = self.db.scalar(select(ChartAccount).where(ChartAccount.parent_id == parent.id, ChartAccount.name == name))
+        if existing:
+            if not existing.is_active:
+                existing.is_active = True
+            existing.account_nature = AccountNature.loan
+            self.db.flush()
+            return existing
+
+        item = ChartAccount(
+            code=self._next_child_code(parent_code),
+            name=name,
+            parent_id=parent.id,
+            account_nature=AccountNature.loan,
+            is_active=True,
+        )
+        self.db.add(item)
+        self.db.flush()
+        return item
+
+    def _next_child_code(self, parent_code: str) -> str:
+        prefix = f"{parent_code}."
+        codes = list(self.db.scalars(select(ChartAccount.code).where(ChartAccount.code.like(f"{prefix}%"))))
+        numbers: list[int] = []
+        for code in codes:
+            suffix = code.removeprefix(prefix)
+            if suffix.isdigit():
+                numbers.append(int(suffix))
+        return f"{parent_code}.{(max(numbers) if numbers else 0) + 1}"

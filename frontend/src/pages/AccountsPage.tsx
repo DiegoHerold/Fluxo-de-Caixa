@@ -1,4 +1,4 @@
-import { Edit3, PiggyBank, Plus, Power } from "lucide-react";
+import { Edit3, PiggyBank, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AccountForm } from "../components/forms/AccountForm";
@@ -35,6 +35,7 @@ export function AccountsPage() {
   const [reserveOpen, setReserveOpen] = useState(false);
   const [selectedReserve, setSelectedReserve] = useState<ReserveBox | null>(null);
   const [reserveForm, setReserveForm] = useState<ReserveBoxPayload>(emptyReserve);
+  const [deleteBlockers, setDeleteBlockers] = useState<string | null>(null);
 
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: accountsService.list });
   const balances = useQuery({ queryKey: ["account-balances"], queryFn: accountsService.balances });
@@ -74,7 +75,8 @@ export function AccountsPage() {
 
   const deactivateMutation = useMutation({
     mutationFn: accountsService.deactivate,
-    onSuccess: () => invalidateMoney(queryClient)
+    onSuccess: () => invalidateMoney(queryClient),
+    onError: (error) => setDeleteBlockers(formatDeleteError(error))
   });
 
   const saveReserveMutation = useMutation({
@@ -99,7 +101,8 @@ export function AccountsPage() {
 
   const deactivateReserveMutation = useMutation({
     mutationFn: reserveBoxesService.deactivate,
-    onSuccess: () => invalidateMoney(queryClient)
+    onSuccess: () => invalidateMoney(queryClient),
+    onError: (error) => setDeleteBlockers(formatDeleteError(error))
   });
 
   return (
@@ -182,7 +185,14 @@ export function AccountsPage() {
                             setFormOpen(true);
                           }}
                         />
-                        <Button title="Desativar" variant="ghost" icon={<Power size={16} />} onClick={() => deactivateMutation.mutate(account.id)} />
+                        <Button
+                          title="Apagar"
+                          variant="ghost"
+                          icon={<Trash2 size={16} />}
+                          onClick={() => {
+                            if (confirm(`Apagar a conta ${account.name}?`)) deactivateMutation.mutate(account.id);
+                          }}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -228,7 +238,7 @@ export function AccountsPage() {
                         <div className="font-black text-gray-950">{box.name}</div>
                         <Badge value={box.is_active ? "ativa" : "inativa"} />
                       </div>
-                      <div className="mt-4 text-2xl font-black text-emerald-700">{money(box.current_balance)}</div>
+                      <div className="mt-4 text-2xl font-black text-emerald-700">{money(box.calculated_balance ?? box.current_balance)}</div>
                       {box.target_amount && <div className="mt-1 text-sm font-semibold text-gray-500">Meta: {money(box.target_amount)}</div>}
                       {box.chart_account_code && <div className="mt-1 text-xs font-bold text-violet-700">Entrada: {box.chart_account_code} - {box.chart_account_name}</div>}
                       {box.withdrawal_chart_account_code && <div className="mt-1 text-xs font-bold text-sky-700">Saida: {box.withdrawal_chart_account_code} - {box.withdrawal_chart_account_name}</div>}
@@ -244,8 +254,14 @@ export function AccountsPage() {
                         >
                           Editar
                         </Button>
-                        <Button variant="ghost" icon={<Power size={16} />} onClick={() => deactivateReserveMutation.mutate(box.id)}>
-                          Desativar
+                        <Button
+                          variant="ghost"
+                          icon={<Trash2 size={16} />}
+                          onClick={() => {
+                            if (confirm(`Apagar a caixinha ${box.name}?`)) deactivateReserveMutation.mutate(box.id);
+                          }}
+                        >
+                          Apagar
                         </Button>
                       </div>
                     </div>
@@ -298,6 +314,14 @@ export function AccountsPage() {
           }
         >
           <ReserveBoxForm value={reserveForm} onChange={setReserveForm} accounts={accounts.data ?? []} chartAccounts={chartAccounts.data ?? []} canAutoCreate={!selectedReserve} />
+        </Modal>
+      )}
+
+      {deleteBlockers && (
+        <Modal title="Vinculos encontrados" description="Para apagar, primeiro remova ou ajuste estas vinculações." onClose={() => setDeleteBlockers(null)}>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+            {deleteBlockers}
+          </pre>
         </Modal>
       )}
     </div>
@@ -366,4 +390,33 @@ function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
   queryClient.invalidateQueries({ queryKey: ["reserves"] });
   queryClient.invalidateQueries({ queryKey: ["reserve-boxes"] });
+}
+
+function formatDeleteError(error: unknown): string {
+  const responseData = (error as { response?: { data?: { detail?: unknown } } })?.response?.data;
+  const detail = responseData?.detail;
+  if (!detail) return "Nao foi possivel apagar.";
+  if (typeof detail === "string") return detail;
+
+  const payload = detail as {
+    message?: string;
+    blockers?: Array<{
+      type: string;
+      count: number;
+      items?: Array<Record<string, string | number | null>>;
+    }>;
+  };
+  const lines = [payload.message ?? "Nao foi possivel apagar porque existem vinculos."];
+  for (const blocker of payload.blockers ?? []) {
+    lines.push("");
+    lines.push(`${blocker.type}: ${blocker.count}`);
+    for (const item of blocker.items ?? []) {
+      if (blocker.type === "movimentacoes") {
+        lines.push(`- #${item.id} | ${item.date} | ${item.description} | ${money(item.amount)}`);
+      } else {
+        lines.push(`- #${item.id} | ${item.name ?? item.description ?? ""}`);
+      }
+    }
+  }
+  return lines.join("\n");
 }

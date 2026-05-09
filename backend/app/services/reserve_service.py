@@ -40,11 +40,12 @@ class ReserveService:
             manual_stmt = manual_stmt.where(ReserveBox.account_id == account_id)
         manual_boxes = list(self.db.scalars(manual_stmt))
         manual_keys = {(box.account_id, normalize_text(box.name)) for box in manual_boxes}
+        transaction_delta_by_box = self._transaction_delta_by_reserve_box([box.id for box in manual_boxes])
         items = [
             {
                 "account_id": box.account_id,
                 "name": box.name,
-                "balance": box.current_balance,
+                "balance": Decimal(box.current_balance) + transaction_delta_by_box.get(box.id, Decimal("0.00")),
                 "source": "manual",
             }
             for box in manual_boxes
@@ -79,3 +80,17 @@ class ReserveService:
 
     def calculate_account_reserve_balance(self, account_id: int) -> Decimal:
         return sum((max(item["balance"], Decimal("0.00")) for item in self.calculate_reserves(account_id)), Decimal("0.00"))
+
+    def _transaction_delta_by_reserve_box(self, reserve_box_ids: list[int]) -> dict[int, Decimal]:
+        if not reserve_box_ids:
+            return {}
+        stmt = (
+            select(Transaction.reserve_box_id, Transaction.amount)
+            .where(Transaction.reserve_box_id.in_(reserve_box_ids))
+        )
+        totals: dict[int, Decimal] = {}
+        for reserve_box_id, amount in self.db.execute(stmt):
+            if reserve_box_id is None:
+                continue
+            totals[reserve_box_id] = totals.get(reserve_box_id, Decimal("0.00")) - Decimal(amount)
+        return totals

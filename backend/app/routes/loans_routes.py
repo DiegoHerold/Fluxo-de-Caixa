@@ -26,11 +26,7 @@ router = APIRouter(prefix="/loans", tags=["loans"])
 
 @router.post("/people", response_model=LoanPersonRead, status_code=status.HTTP_201_CREATED)
 def create_person(payload: LoanPersonCreate, db: Session = Depends(get_db)):
-    person = LoanPerson(**payload.model_dump())
-    db.add(person)
-    db.commit()
-    db.refresh(person)
-    return person
+    return LoanService(db).create_person_with_default_accounts(payload)
 
 
 @router.get("/people", response_model=list[LoanPersonSummary])

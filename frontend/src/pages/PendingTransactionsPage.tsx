@@ -52,6 +52,10 @@ export function PendingTransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["classification-rules"] });
       queryClient.invalidateQueries({ queryKey: ["loan-people"] });
       queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["reserve-boxes"] });
+      queryClient.invalidateQueries({ queryKey: ["reserves"] });
+      queryClient.invalidateQueries({ queryKey: ["account-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
     }
   });
 
@@ -74,6 +78,10 @@ export function PendingTransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["loan-people"] });
       queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
+      queryClient.invalidateQueries({ queryKey: ["reserve-boxes"] });
+      queryClient.invalidateQueries({ queryKey: ["reserves"] });
+      queryClient.invalidateQueries({ queryKey: ["account-balances"] });
+      queryClient.invalidateQueries({ queryKey: ["consolidated-balance"] });
     }
   });
 
@@ -94,7 +102,7 @@ export function PendingTransactionsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-sm font-black text-gray-950">Pendências para classificar</div>
-            <div className="text-sm text-gray-500">Ao classificar, uma regra exata fica marcada por padrão para próximas transações iguais.</div>
+            <div className="text-sm text-gray-500">Classifique uma vez; marque salvar regra somente quando quiser automatizar os próximos lançamentos iguais.</div>
           </div>
           <Badge value={`${pending.data?.length ?? 0} pendentes`} />
         </div>
@@ -210,7 +218,7 @@ function PendingRow({
   const [chartAccountId, setChartAccountId] = useState(0);
   const [transactionType, setTransactionType] = useState<TransactionType>(Number(tx.amount) >= 0 ? "income" : "expense");
   const [destination, setDestination] = useState("account");
-  const [createRule, setCreateRule] = useState(true);
+  const [createRule, setCreateRule] = useState(false);
   const [keyword, setKeyword] = useState("");
 
   const reserveBoxId = destination === "account" ? null : Number(destination);

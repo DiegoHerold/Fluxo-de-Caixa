@@ -9,6 +9,7 @@ export interface ReserveBox {
   withdrawal_chart_account_name: string | null;
   name: string;
   current_balance: string;
+  calculated_balance: string | null;
   target_amount: string | null;
   notes: string | null;
   is_active: boolean;

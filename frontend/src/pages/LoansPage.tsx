@@ -147,6 +147,7 @@ export function LoansPage() {
     queryClient.invalidateQueries({ queryKey: ["loan-links"] });
     queryClient.invalidateQueries({ queryKey: ["loan-movements"] });
     queryClient.invalidateQueries({ queryKey: ["loan-settings"] });
+    queryClient.invalidateQueries({ queryKey: ["chart-accounts"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-widgets"] });
     queryClient.invalidateQueries({ queryKey: ["report-indicator-evaluations"] });
   }
