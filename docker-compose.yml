@@ -1,19 +1,12 @@
 services:
-  backend:
+  app:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      CORS_ORIGINS: ${CORS_ORIGINS:-'["http://localhost:5173","http://127.0.0.1:5173"]'}
+      CORS_ORIGINS: ${CORS_ORIGINS:-'["*"]'}
     ports:
       - "8000:8000"
-
-  frontend:
-    build:
-      context: ./frontend
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
